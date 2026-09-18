@@ -10,6 +10,7 @@ export type CartItem = Product & { quantity: number };
 export type Order = { id: string; items: { product_id: string; name: string; image: string; price: number; quantity: number }[]; address: { full_name: string; mobile: string; email?: string; address: string; landmark?: string; city: string; state: string; pincode: string }; subtotal: number; discount: number; delivery_charge: number; total: number; status: string; payment_method: string; created_at: string; customer_name?: string };
 export type StockEvent = { id: string; product_id: string; quantity: number; operation: "add" | "set"; note: string; created_at: string };
 export type Review = { id: string; product_id: string; user_id: string; user_name: string; rating: number; comment: string; created_at: string };
+export type DashboardStats = { today_orders: number; today_revenue: number; active_orders: number; total_delivered: number; total_revenue: number; low_stock: Product[]; pending_users: number; total_products: number };
 export type ProductFilters = { search?: string; category_id?: string; sort?: string; available?: boolean; min_price?: number; max_price?: number; min_rating?: number; min_discount?: number };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -54,6 +55,7 @@ export const api = {
   listUsers: (status: "pending" | "approved") => request<User[]>(`/users?status=${status}`),
   approveUser: (id: string) => request<User>(`/users/${id}/approve`, { method: "POST" }),
   rejectUser: (id: string) => request<{ deleted: boolean }>(`/users/${id}/reject`, { method: "POST" }),
+  dashboardStats: () => request<DashboardStats>("/dashboard/stats"),
 };
 
 export async function saveSession(token: string, user: User) {

@@ -425,6 +425,29 @@ async def create_review(product_id: str, payload: ReviewInput, authorization: Op
     return review
 
 
+@api.get("/dashboard/stats")
+async def dashboard_stats(authorization: Optional[str] = Header(default=None)) -> dict:
+    await admin_user(authorization)
+    today = datetime.now(timezone.utc).date().isoformat()
+    all_orders = await db.orders.find({}, {"_id": 0}).to_list(1000)
+    today_orders = [o for o in all_orders if o.get("created_at", "").startswith(today) and o.get("status") != "cancelled"]
+    active_orders = [o for o in all_orders if o.get("status") == "processing"]
+    delivered_orders = [o for o in all_orders if o.get("status") == "delivered"]
+    low_stock = await db.products.find({"stock": {"$lte": 5}}, {"_id": 0}).sort("stock", 1).to_list(20)
+    pending_users = await db.users.count_documents({"role": "customer", "is_approved": False})
+    total_products = await db.products.count_documents({})
+    return {
+        "today_orders": len(today_orders),
+        "today_revenue": sum(o.get("total", 0) for o in today_orders),
+        "active_orders": len(active_orders),
+        "total_delivered": len(delivered_orders),
+        "total_revenue": sum(o.get("total", 0) for o in all_orders if o.get("status") != "cancelled"),
+        "low_stock": low_stock,
+        "pending_users": pending_users,
+        "total_products": total_products,
+    }
+
+
 @api.post("/orders")
 async def create_order(payload: OrderInput, authorization: Optional[str] = Header(default=None)) -> dict:
     user = await approved_user(authorization)

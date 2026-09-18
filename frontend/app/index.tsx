@@ -62,7 +62,7 @@ export default function Index() {
   const content = activeTab === "Home" ? <Home categories={categories} products={products} onBrowse={() => setActiveTab("Products")} onCategory={openCategory} onProduct={setDetail} onAdd={add} styles={styles} colors={colors} />
     : activeTab === "Categories" ? <Categories categories={categories} onCategory={openCategory} styles={styles} colors={colors} />
       : activeTab === "Products" ? <Products products={products} setProducts={setProducts} categories={categories} onProduct={setDetail} onAdd={add} styles={styles} colors={colors} />
-        : activeTab === "Orders" ? <Orders orders={orders} styles={styles} colors={colors} />
+        : activeTab === "Orders" ? <Orders orders={orders} products={products} onReorder={(items) => { setCart(items); setScreen("cart"); }} styles={styles} colors={colors} />
           : <Profile session={session} onAdmin={() => setScreen("admin")} onLogout={async () => { await clearSession(); setSession(null); }} styles={styles} colors={colors} />;
   return <View style={[styles.root, { paddingTop: insets.top }]}>
     <View style={styles.header}><View><Text style={styles.logo}>TCH</Text><Text style={styles.headerSub}>KITCHENWARE & GIFTS</Text></View><View style={styles.headerActions}><Pressable testID="location-button" style={styles.iconButton}><Ionicons name="location-outline" size={21} color={colors.onSurface} /></Pressable><Pressable testID="notification-button" style={styles.iconButton}><Ionicons name="notifications-outline" size={22} color={colors.onSurface} /></Pressable><Pressable testID="cart-button" style={styles.cartButton} onPress={() => setScreen("cart")}><Ionicons name="bag-handle-outline" size={22} color={colors.onBrandPrimary} />{cart.length ? <View style={styles.badge}><Text style={styles.badgeText}>{cart.length}</Text></View> : null}</Pressable></View></View>
@@ -286,7 +286,36 @@ function Line({ label, value, styles, bold = false }: any) { return <View style=
 
 function Checkout({ cart, subtotal, onBack, onPlaced, styles, colors }: any) { const [form, setForm] = useState({ full_name: "", mobile: "", email: "", address: "", landmark: "", city: "", state: "", pincode: "" }); const [busy, setBusy] = useState(false); const [message, setMessage] = useState(""); const update = (key: string, value: string) => setForm((old) => ({ ...old, [key]: value })); const place = async () => { if (!form.full_name || !form.mobile || !form.address || !form.city || !form.state || !form.pincode) { setMessage("Please complete the delivery details."); return; } setBusy(true); try { onPlaced(await api.createOrder({ items: cart.map((item) => ({ product_id: item.id, name: item.name, image: item.images?.[0] || "", price: item.price, quantity: item.quantity })), address: form, subtotal, discount: 0, delivery_charge: 0, total: subtotal })); } catch (e) { setMessage(e instanceof Error ? e.message : "Could not place order"); } finally { setBusy(false); } }; return <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}><Top title="Checkout" onBack={onBack} styles={styles} colors={colors} /><ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled"><Text style={styles.pageTitle}>Delivery details</Text><Text style={styles.pageSubtitle}>Where should we send your TCH pieces?</Text>{[["full_name", "Full name"], ["mobile", "Mobile number"], ["email", "Email (optional)"], ["address", "Full address"], ["landmark", "Landmark (optional)"], ["city", "City"], ["state", "State"], ["pincode", "Pincode"]].map(([key, label]) => <Field key={key} label={label} value={(form as any)[key]} onChangeText={(value: string) => update(key, value)} placeholder={label} styles={styles} colors={colors} keyboardType={key === "mobile" || key === "pincode" ? "phone-pad" : "default"} />)}{message ? <Text style={styles.formError}>{message}</Text> : null}<View style={styles.deliveryCard}><Ionicons name="shield-checkmark-outline" size={21} color={colors.success} /><View style={styles.flex}><Text style={styles.bold}>Cash on Delivery</Text><Text style={styles.muted}>Estimated delivery in 3–5 business days</Text></View></View><Summary subtotal={subtotal} styles={styles} colors={colors} /></ScrollView><View style={styles.bottomAction}><Pressable testID="place-order" style={styles.primaryButton} onPress={place} disabled={busy}>{busy ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryButtonText}>Place order · {money(subtotal)}</Text>}</Pressable></View></KeyboardAvoidingView>; }
 
-function Orders({ orders, styles, colors }: any) { return <Page styles={styles}><Text style={styles.pageTitle}>Orders</Text><Text style={styles.pageSubtitle}>Track every TCH delivery in one place.</Text>{orders.length ? orders.map((order: Order) => <View style={styles.orderCard} key={order.id}><View style={styles.orderTop}><Text style={styles.bold}>{order.id}</Text><Text style={[styles.status, { color: order.status === "cancelled" ? colors.error : order.status === "delivered" ? colors.success : colors.brandPrimary }]}>{order.status}</Text></View><Text style={styles.muted}>{new Date(order.created_at).toLocaleDateString("en-IN")} · {order.items.length} item(s)</Text><Text style={styles.orderTotal}>{money(order.total)}</Text><Text style={styles.muted}>{order.payment_method}</Text></View>) : <Empty icon="receipt-outline" title="No orders yet" text="Your confirmed orders will appear here." styles={styles} colors={colors} />}</Page>; }
+function Orders({ orders, products, onReorder, styles, colors }: any) {
+  const [message, setMessage] = useState("");
+  const reorder = (order: Order) => {
+    const cartItems: CartItem[] = [];
+    let unavailable = 0;
+    for (const item of order.items) {
+      const product = products.find((p: Product) => p.id === item.product_id);
+      if (product && product.stock > 0) cartItems.push({ ...product, quantity: Math.min(item.quantity, product.stock) });
+      else unavailable += 1;
+    }
+    if (!cartItems.length) { setMessage("None of the items are available for reorder right now."); return; }
+    setMessage(unavailable ? `${unavailable} item(s) unavailable and skipped.` : "");
+    onReorder(cartItems);
+  };
+  return <Page styles={styles}>
+    <Text style={styles.pageTitle}>Orders</Text>
+    <Text style={styles.pageSubtitle}>Track every TCH delivery in one place.</Text>
+    {message ? <Text style={styles.formMessage}>{message}</Text> : null}
+    {orders.length ? orders.map((order: Order) => <View style={styles.orderCard} key={order.id}>
+      <View style={styles.orderTop}><Text style={styles.bold}>{order.id}</Text><Text style={[styles.status, { color: order.status === "cancelled" ? colors.error : order.status === "delivered" ? colors.success : colors.brandPrimary }]}>{order.status}</Text></View>
+      <Text style={styles.muted}>{new Date(order.created_at).toLocaleDateString("en-IN")} · {order.items.length} item(s)</Text>
+      <Text style={styles.orderTotal}>{money(order.total)}</Text>
+      <Text style={styles.muted}>{order.payment_method}</Text>
+      <Pressable testID={`reorder-${order.id}`} style={[styles.smallAction, { alignSelf: "flex-start", marginTop: 12 }]} onPress={() => reorder(order)}>
+        <Ionicons name="repeat-outline" size={16} color={colors.brandPrimary} />
+        <Text style={styles.smallActionText}>Reorder</Text>
+      </Pressable>
+    </View>) : <Empty icon="receipt-outline" title="No orders yet" text="Your confirmed orders will appear here." styles={styles} colors={colors} />}
+  </Page>;
+}
 function Profile({ session, onAdmin, onLogout, styles, colors }: any) { return <Page styles={styles}><Text style={styles.pageTitle}>Profile</Text><View style={styles.profileCard}><View style={styles.avatar}><Text style={styles.avatarText}>{session.user.full_name.slice(0, 1).toUpperCase()}</Text></View><View><Text style={styles.profileName}>{session.user.full_name}</Text><Text style={styles.muted}>{session.user.identifier}</Text></View></View>{session.user.role === "admin" ? <Pressable testID="admin-studio" style={styles.adminCard} onPress={onAdmin}><Ionicons name="settings-outline" size={24} color={colors.onBrandPrimary} /><View style={styles.flex}><Text style={styles.adminTitle}>Admin Studio</Text><Text style={styles.adminText}>Manage users, products, categories and orders</Text></View><Ionicons name="chevron-forward" size={20} color={colors.onBrandPrimary} /></Pressable> : <Info icon="location-outline" title="Saved addresses" text="Add an address during checkout" styles={styles} colors={colors} />}<Info icon="language-outline" title="Language" text="English · Hindi-ready" styles={styles} colors={colors} /><Info icon="information-circle-outline" title="About TCH" text="Crockery, gifts and kitchenware" styles={styles} colors={colors} /><Pressable style={styles.outlineButton} onPress={onLogout}><Text style={styles.outlineText}>Sign out</Text></Pressable></Page>; }
 function Info({ icon, title, text, styles, colors }: any) { return <View style={styles.infoCard}><Ionicons name={icon} size={21} color={colors.brandPrimary} /><View><Text style={styles.bold}>{title}</Text><Text style={styles.muted}>{text}</Text></View></View>; }
 
@@ -372,6 +401,15 @@ function createStyles(colors: any) { return StyleSheet.create({
   manageThumb: { width: 60, height: 60, borderRadius: 12, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   stockPill: { position: "absolute", right: 7, top: 7, borderRadius: 7, paddingHorizontal: 6, paddingVertical: 4 },
   stockPillText: { fontSize: 9, fontWeight: "800" },
+  statGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 24 },
+  statCard: { width: "48%", padding: 16, borderRadius: 16, gap: 6, minHeight: 110, justifyContent: "space-between" },
+  statCardOutline: { width: "48%", padding: 16, borderRadius: 16, gap: 6, minHeight: 110, backgroundColor: colors.surfaceSecondary, justifyContent: "space-between" },
+  statValueLight: { color: colors.onBrandPrimary, fontSize: 22, fontWeight: "900" },
+  statLabelLight: { color: colors.onBrandPrimary, opacity: 0.85, fontSize: 11, fontWeight: "700" },
+  statValue: { color: colors.onSurface, fontSize: 22, fontWeight: "900" },
+  statLabel: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+  promoCard: { padding: 14, borderRadius: 18, backgroundColor: colors.surfaceSecondary, gap: 10, marginBottom: 20 },
+  promoImage: { width: "100%", height: 220, borderRadius: 12 },
   zoomWrap: { flex: 1, backgroundColor: "#000000" },
   zoomClose: { position: "absolute", top: 40, right: 20, width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", zIndex: 10 },
   zoomScroll: { flexGrow: 1, alignItems: "center", justifyContent: "center" },

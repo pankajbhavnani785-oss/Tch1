@@ -1,13 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as Sharing from "expo-sharing";
+import { Asset } from "expo-asset";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Image, Linking, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { api, Category, Order, Product, StockEvent, User } from "@/src/api";
+import { ActivityIndicator, Alert, Image, Linking, Modal, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
+import { api, Category, DashboardStats, Order, Product, StockEvent, User } from "@/src/api";
 
 type Props = { categories: Category[]; products: Product[]; orders: Order[]; onBack: () => void; refresh: () => Promise<void>; styles: any; colors: any };
 
 const money = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
 const imageUri = (source?: string) => source ? (source.startsWith("data:") ? source : `data:image/jpeg;base64,${source}`) : "";
+
+const APP_SHARE_MESSAGE = "🛍️ *TCH Kitchenware & Gifts* — Shop premium crockery, glassware and homeware with fast delivery across India. Cash on Delivery available. Download the TCH app and start shopping today!";
 
 function normalizeMobile(mobile: string): string {
   const digits = (mobile || "").replace(/\D/g, "");
@@ -47,7 +51,7 @@ function buildOrderMessage(order: Order): string {
 }
 
 export function AdminStudio({ categories, products, orders, onBack, refresh, styles, colors }: Props) {
-  const [tab, setTab] = useState("Products");
+  const [tab, setTab] = useState("Dashboard");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -69,6 +73,9 @@ export function AdminStudio({ categories, products, orders, onBack, refresh, sty
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [approvedUsers, setApprovedUsers] = useState<User[]>([]);
   const [userView, setUserView] = useState<"pending" | "approved">("pending");
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+
+  useEffect(() => { if (tab === "Dashboard") api.dashboardStats().then(setStats).catch(() => setStats(null)); }, [tab, orders, products]);
 
   useEffect(() => { if (!selectedId && products[0]) setSelectedId(products[0].id); }, [products, selectedId]);
   useEffect(() => { if (selectedId) api.stockHistory(selectedId).then(setHistory).catch(() => setHistory([])); }, [selectedId]);
@@ -116,6 +123,25 @@ export function AdminStudio({ categories, products, orders, onBack, refresh, sty
     const url = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
     Linking.openURL(url).catch(() => Alert.alert("WhatsApp unavailable", "Install WhatsApp to share this order."));
   };
+
+  const shareAppImage = async () => {
+    try {
+      const asset = Asset.fromModule(require("../../assets/images/tch-promo.png"));
+      await asset.downloadAsync();
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare && asset.localUri) {
+        await Sharing.shareAsync(asset.localUri, { dialogTitle: "Share TCH Kitchenware", mimeType: "image/png", UTI: "public.png" });
+      } else {
+        await Share.share({ message: APP_SHARE_MESSAGE });
+      }
+    } catch (e) {
+      Alert.alert("Could not share", e instanceof Error ? e.message : "Please try again.");
+    }
+  };
+
+  const shareAppOnWhatsapp = () => {
+    Linking.openURL(`https://wa.me/?text=${encodeURIComponent(APP_SHARE_MESSAGE)}`).catch(() => Alert.alert("WhatsApp unavailable", "Install WhatsApp to share the app."));
+  };
   const remove = async (order: Order) => { try { await api.deleteOrder(order.id); await refresh(); } catch (e) { setMessage(e instanceof Error ? e.message : "Only dispatched or cancelled orders can be deleted"); } };
   const deleteProduct = async (product: Product) => { try { await api.deleteProduct(product.id); await refresh(); setMessage(`${product.name} removed.`); } catch (e) { setMessage(e instanceof Error ? e.message : "Could not remove product"); } };
 
@@ -135,10 +161,41 @@ export function AdminStudio({ categories, products, orders, onBack, refresh, sty
     <View style={styles.detailHeader}><Pressable style={styles.iconButton} onPress={onBack}><Ionicons name="arrow-back" size={22} color={colors.onSurface} /></Pressable><Text style={styles.headerTitle}>Admin Studio</Text><View style={styles.iconButton} /></View>
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
       <ScrollView horizontal contentContainerStyle={styles.horizontal} showsHorizontalScrollIndicator={false}>
-        {["Products", "Manage", "Stock", "Categories", "Users", "Orders"].map((item) => <Pressable testID={`admin-${item.toLowerCase()}`} key={item} style={[styles.filterPill, tab === item && styles.filterPillActive]} onPress={() => setTab(item)}><Text style={[styles.filterText, tab === item && styles.filterTextActive]}>{item}</Text></Pressable>)}
+        {["Dashboard", "Products", "Manage", "Stock", "Categories", "Users", "Orders"].map((item) => <Pressable testID={`admin-${item.toLowerCase()}`} key={item} style={[styles.filterPill, tab === item && styles.filterPillActive]} onPress={() => setTab(item)}><Text style={[styles.filterText, tab === item && styles.filterTextActive]}>{item}</Text></Pressable>)}
       </ScrollView>
 
-      {tab === "Products" ? <>
+      {tab === "Dashboard" ? <>
+        <Text style={styles.pageTitle}>Sales snapshot</Text>
+        <Text style={styles.pageSubtitle}>Today at a glance — orders, revenue and low stock.</Text>
+        <View style={styles.statGrid}>
+          <View style={[styles.statCard, { backgroundColor: colors.brandPrimary }]}><Ionicons name="cart-outline" size={22} color={colors.onBrandPrimary} /><Text style={styles.statValueLight}>{stats?.today_orders ?? 0}</Text><Text style={styles.statLabelLight}>Orders today</Text></View>
+          <View style={[styles.statCard, { backgroundColor: colors.brandSecondary }]}><Ionicons name="cash-outline" size={22} color={colors.onBrandPrimary} /><Text style={styles.statValueLight}>{money(stats?.today_revenue ?? 0)}</Text><Text style={styles.statLabelLight}>Revenue today</Text></View>
+          <View style={styles.statCardOutline}><Ionicons name="hourglass-outline" size={22} color={colors.warning} /><Text style={styles.statValue}>{stats?.active_orders ?? 0}</Text><Text style={styles.statLabel}>Processing</Text></View>
+          <View style={styles.statCardOutline}><Ionicons name="checkmark-circle-outline" size={22} color={colors.success} /><Text style={styles.statValue}>{stats?.total_delivered ?? 0}</Text><Text style={styles.statLabel}>Delivered</Text></View>
+          <View style={styles.statCardOutline}><Ionicons name="people-outline" size={22} color={colors.brandPrimary} /><Text style={styles.statValue}>{stats?.pending_users ?? 0}</Text><Text style={styles.statLabel}>Pending users</Text></View>
+          <View style={styles.statCardOutline}><Ionicons name="storefront-outline" size={22} color={colors.brandPrimary} /><Text style={styles.statValue}>{stats?.total_products ?? 0}</Text><Text style={styles.statLabel}>Total products</Text></View>
+        </View>
+
+        <Text style={styles.sectionTitle}>Low stock alerts</Text>
+        {stats?.low_stock?.length ? stats.low_stock.map((product) => <View style={styles.listRow} key={product.id}>
+          <Ionicons name={product.stock === 0 ? "alert-circle" : "warning-outline"} size={20} color={product.stock === 0 ? colors.error : colors.warning} />
+          <Text style={styles.flexText} numberOfLines={1}>{product.name}</Text>
+          <Text style={[styles.rating, { color: product.stock === 0 ? colors.error : colors.warning }]}>{product.stock === 0 ? "Out" : `${product.stock} left`}</Text>
+        </View>) : <Text style={styles.muted}>All products are well stocked.</Text>}
+
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Promote TCH on WhatsApp</Text>
+        <Text style={styles.pageSubtitle}>Share the app image with customers to bring them into the store.</Text>
+        <View style={styles.promoCard}>
+          <Image testID="app-promo-image" source={require("../../assets/images/tch-promo.png")} style={styles.promoImage} resizeMode="cover" />
+          <Text style={styles.bold}>TCH Kitchenware & Gifts</Text>
+          <Text style={styles.muted}>Send this promo card to customers on WhatsApp along with your invite message.</Text>
+          <View style={styles.adminOrderActions}>
+            <Pressable testID="share-app-image" style={styles.primaryButtonSmall} onPress={shareAppImage}><Ionicons name="share-social-outline" size={16} color={colors.onBrandPrimary} /><Text style={[styles.primaryButtonText, { marginLeft: 6 }]}>Share image</Text></Pressable>
+            <Pressable testID="share-app-whatsapp" style={styles.secondaryButton} onPress={shareAppOnWhatsapp}><Ionicons name="logo-whatsapp" size={16} color={colors.brandPrimary} /><Text style={[styles.secondaryButtonText, { marginLeft: 6 }]}>WhatsApp text</Text></Pressable>
+          </View>
+        </View>
+      </>
+      : tab === "Products" ? <>
         <Text style={styles.pageTitle}>Add a product</Text>
         <Text style={styles.pageSubtitle}>Use gallery photos or paste up to four HTTPS image links.</Text>
         <Field testID="admin-product-name" label="Product name" value={name} onChangeText={setName} placeholder="Product name" styles={styles} colors={colors} />

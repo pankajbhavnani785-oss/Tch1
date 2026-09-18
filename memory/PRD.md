@@ -21,6 +21,9 @@ Build a production-ready mobile-first e-commerce application for TCH Kitchenware
 - Product detail: tap-to-zoom fullscreen image viewer with pinch zoom, similar products carousel, customer reviews (5-star input) that update the average rating.
 - Advanced filters/sort: category, price range, min rating, min discount, in-stock only, sorted by newest/price/rating/popularity.
 - WhatsApp order sharing: opens customer's number with a complete formatted order breakdown (items, totals, delivery address).
+- **Reorder shortcut**: Customer taps Reorder on any past order to instantly refill the cart with available items.
+- **Admin Sales Snapshot**: Dashboard tab shows today's orders + revenue, processing/delivered counts, pending users, total products, and low-stock alerts.
+- **App promo sharing**: Admin can share a branded TCH promo image via WhatsApp (native share sheet) or send a plain WhatsApp promo text.
 - Full COD checkout, order history, admin order status/cancel/delete, category CRUD.
 
 ## Prioritized backlog
