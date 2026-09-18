@@ -8,8 +8,8 @@ import uuid
 import bcrypt
 import jwt
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, Header, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from fastapi import APIRouter, FastAPI, Header, HTTPException
+from pydantic import BaseModel, EmailStr, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.middleware.cors import CORSMiddleware
 
@@ -18,7 +18,7 @@ load_dotenv(ROOT_DIR / ".env")
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get("DB_NAME", "tch_kitchenware")]
-JWT_SECRET = os.environ.get("JWT_SECRET", "tch-local-secret-change-me")
+JWT_SECRET = os.environ["JWT_SECRET"]
 
 app = FastAPI(title="TCH Kitchenware API")
 api = APIRouter(prefix="/api")
@@ -104,20 +104,6 @@ def clean(doc: Optional[dict]) -> Optional[dict]:
 
 def token_for(user: dict) -> str:
     return jwt.encode({"sub": user["id"], "role": user["role"], "exp": datetime.now(timezone.utc) + timedelta(days=14)}, JWT_SECRET, algorithm="HS256")
-
-
-async def current_user(token: str = Query(default="")) -> dict:
-    # Query is intentionally supported for simple mobile fetch helpers; the frontend sends Authorization too.
-    if not token:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-    except jwt.PyJWTError as exc:
-        raise HTTPException(status_code=401, detail="Invalid session") from exc
-    user = await db.users.find_one({"id": payload.get("sub")}, {"_id": 0})
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    return user
 
 
 def make_user(identifier: str, full_name: str, role: str) -> dict:
