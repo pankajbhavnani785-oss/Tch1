@@ -1,7 +1,7 @@
 # TCH Kitchenware — Product Requirements
 
 ## Problem statement
-Build a production-ready mobile-first e-commerce application for TCH Kitchenware & Home Products, focused on crockery and gifts in India. Customers must authenticate before browsing, shop products, place Cash on Delivery orders, and view order history. Approved admins manage categories, products with up to four gallery images, and order history.
+Build a production-ready mobile-first e-commerce application for TCH Kitchenware & Home Products, focused on crockery and gifts in India. Customers register with mobile/email + password and wait for admin approval before browsing. Admin verifies each customer on WhatsApp and approves them from the Admin Studio.
 
 ## Architecture
 - Expo SDK 57 React Native mobile frontend with a single protected storefront flow and five bottom navigation areas.
@@ -9,28 +9,26 @@ Build a production-ready mobile-first e-commerce application for TCH Kitchenware
 - Product photos are converted to base64 before being sent to the backend; Indian Rupee pricing and COD are built into checkout.
 
 ## User personas
-- Customer: signs up/signs in with email or mobile, discovers kitchenware, manages a cart, and places a COD order.
-- Store admin: uses a protected email/password account to curate categories/products and manage orders.
-
-## Core requirements (static)
-- Deep-red premium TCH brand, dark charcoal surfaces, rounded cards, readable prices, modern icons.
-- Customer login gate, Home, Categories, Products, Orders, Profile, cart, product details, checkout, confirmation via Orders.
-- Admin-only category/product/order tools, four-photo gallery upload, order status updates, deletion backend for dispatched/cancelled history, WhatsApp sharing.
+- Customer: signs up/signs in with email or mobile, waits for approval, discovers kitchenware, manages a cart, and places a COD order.
+- Store admin: uses a protected email/password account to approve customers, curate categories/products, edit product SKU/category, and manage orders.
 
 ## Implemented
-- 2026-09-18: Replaced the starter screen with TCH auth-gated mobile storefront and five navigation areas.
-- 2026-09-18: Added FastAPI JWT customer/admin auth, seeded admin, 14 starter categories, MongoDB product/category/order APIs.
-- 2026-09-18: Added cart quantity controls, product detail view, COD checkout address form, order history, status badges, and admin studio.
-- 2026-09-18: Added mobile gallery picker with up to four base64 photos, category creation, order sharing, and status management.
-- 2026-09-18: Verified preview rendering, admin login, customer registration, protected order retrieval, backend compilation, and frontend TypeScript/lint checks.
+- Auth-gated TCH storefront with five-tab bottom navigation and Admin Studio.
+- Customer approval flow: pending users blocked from ordering, "Waiting for approval" screen with WhatsApp CTA, admin Users tab with approve/reject/WhatsApp actions.
+- Product catalog with base64 images, gallery upload + HTTPS URL upload, stock tracking with purchase history.
+- Admin product management: edit category, stock (SKU), price, MRP, name and description from the "Manage" tab; delete products.
+- Amazon-style prominent stock indicators for customers: "In stock · N available", "Only N left in stock — order soon", "Out of stock" on cards and detail.
+- Product detail: tap-to-zoom fullscreen image viewer with pinch zoom, similar products carousel, customer reviews (5-star input) that update the average rating.
+- Advanced filters/sort: category, price range, min rating, min discount, in-stock only, sorted by newest/price/rating/popularity.
+- WhatsApp order sharing: opens customer's number with a complete formatted order breakdown (items, totals, delivery address).
+- Full COD checkout, order history, admin order status/cancel/delete, category CRUD.
 
 ## Prioritized backlog
-- P0: Add real product catalog through Admin Studio and validate gallery uploads on a physical device.
-- P1: Add editable category controls and delete buttons directly to the admin mobile list; add saved-address persistence and product pagination.
-- P1: Add order confirmation detail screen and customer cancellation support.
-- P2: Add Hindi translation strings/toggle, real promotional imagery, reviews, and notifications.
+- P1: Saved-address book for repeat customers and product pagination.
+- P1: Push-in-app notifications for new pending approvals.
+- P2: Hindi translation toggle, real promotional imagery, shipment tracking.
 
 ## Next tasks
-1. Admin adds the first product set with photos, prices, stock, material, and dimensions.
-2. Customer validates browse → cart → COD order on a device.
-3. Store team reviews order status and WhatsApp message formatting.
+1. Admin approves the first live customer via WhatsApp verification.
+2. Customer completes end-to-end shop → checkout journey and confirms the SKU/stock indicators.
+3. Store team validates the WhatsApp order share message with real deliveries.

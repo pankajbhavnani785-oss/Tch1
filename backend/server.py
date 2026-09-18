@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, List, Optional
+import base64
 import logging
 import os
+import urllib.request
 import uuid
 
 import bcrypt
@@ -91,6 +93,28 @@ class StatusInput(BaseModel):
     status: str
 
 
+class StockInput(BaseModel):
+    quantity: int = Field(gt=0, le=100000)
+    operation: str = "add"
+    note: str = ""
+
+
+class ReviewInput(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comment: str = Field(min_length=1, max_length=1000)
+
+
+class ProductPatch(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category_id: Optional[str] = None
+    mrp: Optional[float] = None
+    price: Optional[float] = None
+    stock: Optional[int] = None
+    material: Optional[str] = None
+    dimensions: Optional[str] = None
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -108,7 +132,34 @@ def token_for(user: dict) -> str:
 
 def make_user(identifier: str, full_name: str, role: str) -> dict:
     email = identifier.lower() if "@" in identifier else ""
-    return {"id": str(uuid.uuid4()), "identifier": identifier, "email": email, "full_name": full_name, "role": role, "created_at": now_iso()}
+    return {"id": str(uuid.uuid4()), "identifier": identifier, "email": email, "full_name": full_name, "role": role, "is_approved": role == "admin", "created_at": now_iso()}
+
+
+def safe_user(user: dict) -> dict:
+    approved = user.get("is_approved", True) if user.get("role") == "admin" else user.get("is_approved", False)
+    return {k: v for k, v in {**user, "is_approved": approved}.items() if k != "password_hash"}
+
+
+def normalize_images(images: List[str]) -> List[str]:
+    normalized: List[str] = []
+    for image in images[:4]:
+        if image.startswith("https://"):
+            try:
+                request = urllib.request.Request(image, headers={"User-Agent": "TCH-Kitchenware/1.0"})
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    content = response.read(5 * 1024 * 1024 + 1)
+                if len(content) > 5 * 1024 * 1024:
+                    raise ValueError("Image is larger than 5 MB")
+                normalized.append(base64.b64encode(content).decode("ascii"))
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Could not download image URL: {image}") from exc
+        elif image.startswith("http://"):
+            raise HTTPException(status_code=400, detail="Product image links must use HTTPS")
+        elif image.startswith("data:") and "," in image:
+            normalized.append(image.split(",", 1)[1])
+        else:
+            normalized.append(image)
+    return normalized
 
 
 async def auth_user(authorization: Optional[str]) -> dict:
@@ -124,6 +175,15 @@ async def auth_user(authorization: Optional[str]) -> dict:
     return user
 
 
+async def approved_user(authorization: Optional[str]) -> dict:
+    user = await auth_user(authorization)
+    if user.get("role") == "admin":
+        return user
+    if not user.get("is_approved", False):
+        raise HTTPException(status_code=403, detail="Your account is waiting for admin approval. Contact TCH support on WhatsApp.")
+    return user
+
+
 async def admin_user(authorization: Optional[str]) -> dict:
     user = await auth_user(authorization)
     if user.get("role") != "admin":
@@ -136,6 +196,10 @@ async def seed_defaults() -> None:
     admin = await db.users.find_one({"identifier": "admin@tch.in"}, {"_id": 0})
     if not admin:
         await db.users.insert_one({**make_user("admin@tch.in", "TCH Admin", "admin"), "password_hash": bcrypt.hashpw(b"TCHAdmin@123", bcrypt.gensalt()).decode()})
+    else:
+        await db.users.update_one({"identifier": "admin@tch.in"}, {"$set": {"is_approved": True}})
+    # Backfill existing customers as approved so old accounts keep working
+    await db.users.update_many({"role": "customer", "is_approved": {"$exists": False}}, {"$set": {"is_approved": True}})
     for name in DEFAULT_CATEGORIES:
         if not await db.categories.find_one({"name": name}, {"_id": 0}):
             await db.categories.insert_one({"id": str(uuid.uuid4()), "name": name, "icon": "grid-outline", "created_at": now_iso()})
@@ -156,8 +220,7 @@ async def register(payload: RegisterInput) -> dict:
         user["email"] = str(payload.email)
     user["password_hash"] = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt()).decode()
     await db.users.insert_one(user.copy())
-    user.pop("password_hash", None)
-    return {"token": token_for(user), "user": user}
+    return {"token": token_for(user), "user": safe_user(user)}
 
 
 @api.post("/auth/login")
@@ -165,7 +228,7 @@ async def login(payload: AuthInput) -> dict:
     user = await db.users.find_one({"identifier": payload.identifier}, {"_id": 0})
     if not user or not bcrypt.checkpw(payload.password.encode(), user["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Incorrect email/mobile or password")
-    safe = {k: v for k, v in user.items() if k != "password_hash"}
+    safe = safe_user(user)
     return {"token": token_for(safe), "user": safe}
 
 
@@ -174,8 +237,45 @@ async def admin_login(payload: AuthInput) -> dict:
     user = await db.users.find_one({"identifier": payload.identifier, "role": "admin"}, {"_id": 0})
     if not user or not bcrypt.checkpw(payload.password.encode(), user["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Invalid admin credentials")
-    safe = {k: v for k, v in user.items() if k != "password_hash"}
+    safe = safe_user(user)
     return {"token": token_for(safe), "user": safe}
+
+
+@api.get("/auth/me")
+async def me(authorization: Optional[str] = Header(default=None)) -> dict:
+    user = await auth_user(authorization)
+    return safe_user(user)
+
+
+@api.get("/users")
+async def list_users(status: str = "pending", authorization: Optional[str] = Header(default=None)) -> List[dict]:
+    await admin_user(authorization)
+    query: dict = {"role": "customer"}
+    if status == "pending":
+        query["is_approved"] = False
+    elif status == "approved":
+        query["is_approved"] = True
+    rows = await db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(500)
+    return rows
+
+
+@api.post("/users/{user_id}/approve")
+async def approve_customer(user_id: str, authorization: Optional[str] = Header(default=None)) -> dict:
+    await admin_user(authorization)
+    result = await db.users.update_one({"id": user_id, "role": "customer"}, {"$set": {"is_approved": True, "approved_at": now_iso()}})
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    return safe_user(user)
+
+
+@api.post("/users/{user_id}/reject")
+async def reject_customer(user_id: str, authorization: Optional[str] = Header(default=None)) -> dict:
+    await admin_user(authorization)
+    result = await db.users.delete_one({"id": user_id, "role": "customer"})
+    if not result.deleted_count:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"deleted": True}
 
 
 @api.get("/categories")
@@ -206,7 +306,7 @@ async def update_category(category_id: str, payload: CategoryInput, authorizatio
 
 
 @api.get("/products")
-async def products(search: str = "", category_id: str = "", sort: str = "newest", available: bool = False) -> List[dict]:
+async def products(search: str = "", category_id: str = "", sort: str = "newest", available: bool = False, min_price: float = 0, max_price: float = 0, min_rating: float = 0, min_discount: float = 0) -> List[dict]:
     query: dict[str, Any] = {}
     if search:
         query["$or"] = [{"name": {"$regex": search, "$options": "i"}}, {"description": {"$regex": search, "$options": "i"}}]
@@ -214,9 +314,17 @@ async def products(search: str = "", category_id: str = "", sort: str = "newest"
         query["category_id"] = category_id
     if available:
         query["stock"] = {"$gt": 0}
+    if min_price > 0:
+        query.setdefault("price", {})["$gte"] = min_price
+    if max_price > 0:
+        query.setdefault("price", {})["$lte"] = max_price
+    if min_rating > 0:
+        query["rating"] = {"$gte": min_rating}
     sort_field = {"price_low": "price", "price_high": "price", "rating": "rating", "popular": "sold_count"}.get(sort, "created_at")
     direction = 1 if sort == "price_low" else -1
     rows = await db.products.find(query, {"_id": 0}).sort(sort_field, direction).to_list(500)
+    if min_discount > 0:
+        rows = [row for row in rows if row.get("mrp", 0) > 0 and ((row["mrp"] - row["price"]) / row["mrp"]) * 100 >= min_discount]
     return rows
 
 
@@ -227,7 +335,9 @@ async def create_product(payload: ProductInput, authorization: Optional[str] = H
         raise HTTPException(status_code=400, detail="Choose a valid category")
     if payload.price > payload.mrp:
         raise HTTPException(status_code=400, detail="Selling price cannot exceed MRP")
-    row = {"id": str(uuid.uuid4()), **payload.model_dump(), "sold_count": 0, "created_at": now_iso()}
+    values = payload.model_dump()
+    values["images"] = normalize_images(values.get("images", []))
+    row = {"id": str(uuid.uuid4()), **values, "sold_count": 0, "created_at": now_iso()}
     await db.products.insert_one(row.copy())
     return row
 
@@ -235,16 +345,89 @@ async def create_product(payload: ProductInput, authorization: Optional[str] = H
 @api.put("/products/{product_id}")
 async def update_product(product_id: str, payload: ProductInput, authorization: Optional[str] = Header(default=None)) -> dict:
     await admin_user(authorization)
-    await db.products.update_one({"id": product_id}, {"$set": payload.model_dump()})
+    values = payload.model_dump()
+    values["images"] = normalize_images(values.get("images", []))
+    await db.products.update_one({"id": product_id}, {"$set": values})
     row = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not row:
         raise HTTPException(status_code=404, detail="Product not found")
     return row
 
 
+@api.patch("/products/{product_id}")
+async def patch_product(product_id: str, payload: ProductPatch, authorization: Optional[str] = Header(default=None)) -> dict:
+    await admin_user(authorization)
+    existing = await db.products.find_one({"id": product_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Product not found")
+    updates = {k: v for k, v in payload.model_dump(exclude_none=True).items()}
+    if "category_id" in updates and not await db.categories.find_one({"id": updates["category_id"]}, {"_id": 0}):
+        raise HTTPException(status_code=400, detail="Choose a valid category")
+    price = updates.get("price", existing.get("price"))
+    mrp = updates.get("mrp", existing.get("mrp"))
+    if price and mrp and price > mrp:
+        raise HTTPException(status_code=400, detail="Selling price cannot exceed MRP")
+    if updates:
+        await db.products.update_one({"id": product_id}, {"$set": updates})
+    return await db.products.find_one({"id": product_id}, {"_id": 0})
+
+
+@api.delete("/products/{product_id}")
+async def delete_product(product_id: str, authorization: Optional[str] = Header(default=None)) -> dict:
+    await admin_user(authorization)
+    result = await db.products.delete_one({"id": product_id})
+    if not result.deleted_count:
+        raise HTTPException(status_code=404, detail="Product not found")
+    await db.stock_events.delete_many({"product_id": product_id})
+    await db.reviews.delete_many({"product_id": product_id})
+    return {"deleted": True}
+
+
+@api.post("/products/{product_id}/stock")
+async def update_stock(product_id: str, payload: StockInput, authorization: Optional[str] = Header(default=None)) -> dict:
+    admin = await admin_user(authorization)
+    if payload.operation not in {"add", "set"}:
+        raise HTTPException(status_code=400, detail="Stock operation must be add or set")
+    product = await db.products.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    next_stock = product.get("stock", 0) + payload.quantity if payload.operation == "add" else payload.quantity
+    event = {"id": str(uuid.uuid4()), "product_id": product_id, "quantity": payload.quantity, "operation": payload.operation, "note": payload.note, "admin_id": admin["id"], "created_at": now_iso()}
+    await db.products.update_one({"id": product_id}, {"$set": {"stock": next_stock}})
+    await db.stock_events.insert_one(event.copy())
+    updated = await db.products.find_one({"id": product_id}, {"_id": 0})
+    return {"product": updated, "event": event}
+
+
+@api.get("/products/{product_id}/stock-history")
+async def stock_history(product_id: str, authorization: Optional[str] = Header(default=None)) -> List[dict]:
+    await admin_user(authorization)
+    return await db.stock_events.find({"product_id": product_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+@api.get("/products/{product_id}/reviews")
+async def list_reviews(product_id: str) -> List[dict]:
+    return await db.reviews.find({"product_id": product_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+@api.post("/products/{product_id}/reviews")
+async def create_review(product_id: str, payload: ReviewInput, authorization: Optional[str] = Header(default=None)) -> dict:
+    user = await approved_user(authorization)
+    if not await db.products.find_one({"id": product_id}, {"_id": 0}):
+        raise HTTPException(status_code=404, detail="Product not found")
+    review = {"id": str(uuid.uuid4()), "product_id": product_id, "user_id": user["id"], "user_name": user.get("full_name", "Customer"), "rating": payload.rating, "comment": payload.comment, "created_at": now_iso()}
+    await db.reviews.insert_one(review.copy())
+    # Recompute product rating
+    all_reviews = await db.reviews.find({"product_id": product_id}, {"_id": 0, "rating": 1}).to_list(1000)
+    if all_reviews:
+        avg = sum(r["rating"] for r in all_reviews) / len(all_reviews)
+        await db.products.update_one({"id": product_id}, {"$set": {"rating": round(avg, 2)}})
+    return review
+
+
 @api.post("/orders")
 async def create_order(payload: OrderInput, authorization: Optional[str] = Header(default=None)) -> dict:
-    user = await auth_user(authorization)
+    user = await approved_user(authorization)
     order = {"id": f"TCH-{datetime.now(timezone.utc).strftime('%y%m%d')}-{uuid.uuid4().hex[:6].upper()}", "user_id": user["id"], "customer_name": payload.address.full_name, "items": [item.model_dump() for item in payload.items], "address": payload.address.model_dump(), "subtotal": payload.subtotal, "discount": payload.discount, "delivery_charge": payload.delivery_charge, "total": payload.total, "status": "processing", "payment_method": "Cash on Delivery", "created_at": now_iso()}
     await db.orders.insert_one(order.copy())
     for item in payload.items:
@@ -255,6 +438,8 @@ async def create_order(payload: OrderInput, authorization: Optional[str] = Heade
 @api.get("/orders")
 async def get_orders(authorization: Optional[str] = Header(default=None)) -> List[dict]:
     user = await auth_user(authorization)
+    if user.get("role") != "admin" and not user.get("is_approved", False):
+        return []
     query = {} if user.get("role") == "admin" else {"user_id": user["id"]}
     return await db.orders.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
 

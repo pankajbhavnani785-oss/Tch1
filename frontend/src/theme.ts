@@ -4,12 +4,12 @@ import { Appearance, StyleSheet, useColorScheme } from "react-native";
 export type ColorScheme = "light" | "dark";
 
 const light = {
-  surface: "#121212", onSurface: "#F8FAFC", surfaceSecondary: "#1E1E1E", onSurfaceSecondary: "#FFFFFF",
-  surfaceTertiary: "#2A2A2A", onSurfaceTertiary: "#E2E8F0", surfaceInverse: "#FFFFFF", onSurfaceInverse: "#121212",
-  muted: "#94A3B8", brand: "#B91C1C", onBrand: "#FFFFFF", brandPrimary: "#DC2626", onBrandPrimary: "#FFFFFF",
-  brandSecondary: "#991B1B", onBrandSecondary: "#FFFFFF", brandTertiary: "#7F1D1D", onBrandTertiary: "#FFFFFF",
+  surface: "#FFFFFF", onSurface: "#0F172A", surfaceSecondary: "#F8FAFC", onSurfaceSecondary: "#0F172A",
+  surfaceTertiary: "#EEF2F6", onSurfaceTertiary: "#334155", surfaceInverse: "#0F2D4A", onSurfaceInverse: "#FFFFFF",
+  muted: "#64748B", brand: "#FFFFFF", onBrand: "#0F172A", brandPrimary: "#123B63", onBrandPrimary: "#FFFFFF",
+  brandSecondary: "#0F2D4A", onBrandSecondary: "#FFFFFF", brandTertiary: "#E7EEF5", onBrandTertiary: "#0F2D4A",
   success: "#16A34A", onSuccess: "#FFFFFF", warning: "#CA8A04", onWarning: "#FFFFFF", error: "#DC2626", onError: "#FFFFFF",
-  info: "#2563EB", onInfo: "#FFFFFF", border: "#27272A", borderStrong: "#3F3F46", divider: "#1E1E1E",
+  info: "#2563EB", onInfo: "#FFFFFF", border: "#CBD5E1", borderStrong: "#94A3B8", divider: "#E2E8F0",
 } as const;
 
 export type ThemeColors = typeof light;

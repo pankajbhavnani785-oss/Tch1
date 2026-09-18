@@ -1,0 +1,48 @@
+{
+  "summary": "Backend regression + new-feature verification for TCH Kitchenware. 26/26 pytest cases passed covering: approval flow (register->pending, admin list pending, approve->order OK, reject deletes, non-admin blocked from /users), PATCH /products (partial stock/category updates, invalid category rejected, price>MRP rejected, admin auth required), reviews (pending user forbidden, review created + product avg rating recomputed, rating bounds validation), advanced product filters (min/max price, min_rating, min_discount, available), sort options (price_low/price_high/rating), plus existing admin login, product create with images, stock add/set, unauthenticated 401 on /orders.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/orders",
+        "issue": "Spec says pending customers should get 403 with the WhatsApp message on GET /api/orders. Implementation returns 200 [] for pending customers (server.py:441-442). POST /api/orders correctly returns 403 with the friendly WhatsApp message. Functionally harmless because the frontend renders the pending-approval screen based on user.is_approved, but this diverges from the stated spec."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_tch_backend.py",
+    "/app/test_reports/pytest/pytest_iteration3.xml"
+  ],
+  "action_items": [
+    "Decide whether GET /api/orders should return 403 for pending customers (per spec) or continue returning []. If 403 is desired, swap auth_user + is_approved short-circuit for approved_user dependency at server.py:438-444.",
+    "Cosmetic: convert class-scoped fixtures in tests to @classmethod to remove pytest deprecation warning (non-blocking)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:309 min_price/max_price/min_rating/min_discount use 0 as sentinel; a legitimate 0 filter would be ignored. Acceptable given price>0 constraint.",
+    "server.py:326-327 min_discount filtering is done in-process after mongo query (O(N) memory); fine for current catalog size.",
+    "server.py:438-444 GET /orders diverges from the review-request wording (returns [] instead of 403 for pending customers). POST /orders correctly returns 403.",
+    "server.py:143-162 normalize_images performs synchronous urllib downloads inside an async endpoint, blocking the event loop while fetching HTTPS URLs.",
+    "server.py:421 review-created recomputes average by loading up to 1000 reviews per POST; would scale better with an aggregation pipeline but is fine for MVP.",
+    "server.py:129-135 make_user sets is_approved based on role; registration relies on this defaulting to False for customers - verified by tests."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tch_backend.py",
+    "/app/test_reports/iteration_3.json",
+    "/app/test_reports/pytest/pytest_iteration3.xml"
+  ],
+  "success_rate": {
+    "backend": "100% (26/26)",
+    "frontend": "not tested (backend-only request)"
+  },
+  "seed_data_creation": "All test entities are TEST_-prefixed and are cleaned up per test class (products deleted, users rejected, orders cancelled+deleted). Seeded catalog was not modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend URL: https://tch-gifts-home.preview.emergentagent.com. Frontend uses EXPO_PUBLIC_BACKEND_URL from frontend/.env; the new test file supports both EXPO_BACKEND_URL and EXPO_PUBLIC_BACKEND_URL. The comprehensive regression file is /app/backend/tests/test_tch_backend.py and can be reused. Existing /app/backend/tests/test_tch_api.py still passes. All new endpoints (users pending list, approve, reject, PATCH product, reviews list+create, filters min_price/max_price/min_rating/min_discount/available, sort price_low/price_high/rating) are functioning.",
+  "rca_of_issue": "N/A - no failures reproduced. One spec-vs-impl divergence noted (GET /orders for pending returns [] instead of 403). Report to main agent for decision; not a functional bug."
+}
