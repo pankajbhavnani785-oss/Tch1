@@ -1,0 +1,56 @@
+{
+  "summary": "Backend image-validation contract verified end-to-end (12 new tests + full 29 regression = 41/41 passing). Corrupt-payload rejection, valid base64 storage, data-URI stripping, empty-string filtering, HTTPS URL download-and-encode, PUT enforcement, and seeded-product regression (elight, cello Cup saucer still have >1000-char image bytes; cuo has empty images) all pass. Fixed one stale legacy assertion in test_tch_api.py (expected empty catalog).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/products (normalize_images)",
+        "issue": "Validation is length-only (raw base64 or data-URI payload >= 1000 chars). It does NOT decode the bytes to confirm they are actually image data. Any 1000+ char random string is accepted. Acceptable for MVP because the frontend picker guarantees image bytes, but a corrupt-but-large blob would still slip through and the <Image> tag would silently render blank."
+      },
+      {
+        "endpoint": "normalize_images (HTTPS download)",
+        "issue": "urllib.request.urlopen is a synchronous call inside an async endpoint — it blocks the event loop while downloading up to 5 MB. Consider httpx.AsyncClient / aiohttp. Pre-existing (flagged in iter3)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_image_validation.py",
+    "/app/backend/tests/test_tch_backend.py",
+    "/app/backend/tests/test_tch_api.py",
+    "/app/test_reports/pytest/pytest_iteration4.xml",
+    "/app/test_reports/pytest/pytest_iteration4_all.xml"
+  ],
+  "action_items": [
+    "Optional: strengthen normalize_images to also validate the magic-byte header (JPEG FF D8, PNG 89 50 4E 47, WebP RIFF/WEBP) after base64-decoding the payload. This would catch the 'large-but-not-an-image' edge case.",
+    "Optional: convert synchronous urllib.request in normalize_images to httpx.AsyncClient to avoid blocking the event loop during HTTPS image ingestion.",
+    "Fixed a stale assertion in test_tch_api.py::test_public_catalog_and_admin_auth (previously expected products.json() == []; now asserts it's a list, since seeded products exist)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:143-173 normalize_images correctly enforces >=1000-char threshold on both raw base64 and data-URI payloads and >=1000-byte threshold on downloaded HTTPS bytes; error message matches spec ('empty or corrupted').",
+    "server.py:342-353 create_product and 356-365 update_product both call normalize_images — PUT parity confirmed by tests.",
+    "server.py:145 loop is bounded to images[:4] which matches ProductInput.max_length=4.",
+    "normalize_images does not decode base64 to check it is a real image — length only. Large random strings pass. Documented under minor issues."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_image_validation.py",
+    "/app/backend/tests/test_tch_api.py",
+    "/app/test_reports/iteration_4.json",
+    "/app/test_reports/pytest/pytest_iteration4.xml",
+    "/app/test_reports/pytest/pytest_iteration4_all.xml"
+  ],
+  "success_rate": {
+    "backend": "100% (41/41)",
+    "frontend": "not tested (backend-only request per review_request.testing_type)"
+  },
+  "seed_data_creation": "All TEST_-prefixed products created during tests are deleted in fixture teardown / finally blocks. Existing seeded products (elight, cello Cup saucer, cuo) not modified. Verified cuo still has images == [].",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Image validation contract is enforced server-side and covered by /app/backend/tests/test_image_validation.py (12 cases). Frontend picker fix (ImagePicker base64:true) NOT verifiable from server tests — needs UI test in Expo Go or web preview to confirm chooseImages() consumes asset.base64 instead of running the broken fetch-blob-FileReader path. Backend URL: https://tch-gifts-home.preview.emergentagent.com. Admin creds in /app/memory/test_credentials.md.",
+  "rca_of_issue": "N/A — bug was already fixed by main agent. Testing confirmed the fix: (1) short/corrupt base64 rejected with 400 'empty or corrupted' message, (2) valid base64 stored intact without data: prefix, (3) HTTPS URL downloaded, size-validated, and stored as raw base64, (4) empty string entries filtered non-fatally, (5) PUT endpoint enforces same validation, (6) previously-seeded valid images (elight, cello Cup saucer) still intact, (7) corrupt image on cuo was cleaned up as expected."
+}

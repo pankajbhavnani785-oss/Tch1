@@ -143,6 +143,8 @@ def safe_user(user: dict) -> dict:
 def normalize_images(images: List[str]) -> List[str]:
     normalized: List[str] = []
     for image in images[:4]:
+        if not image:
+            continue
         if image.startswith("https://"):
             try:
                 request = urllib.request.Request(image, headers={"User-Agent": "TCH-Kitchenware/1.0"})
@@ -150,14 +152,23 @@ def normalize_images(images: List[str]) -> List[str]:
                     content = response.read(5 * 1024 * 1024 + 1)
                 if len(content) > 5 * 1024 * 1024:
                     raise ValueError("Image is larger than 5 MB")
+                if len(content) < 1000:
+                    raise ValueError("Downloaded content is too small to be an image")
                 normalized.append(base64.b64encode(content).decode("ascii"))
+            except HTTPException:
+                raise
             except Exception as exc:
                 raise HTTPException(status_code=400, detail=f"Could not download image URL: {image}") from exc
         elif image.startswith("http://"):
             raise HTTPException(status_code=400, detail="Product image links must use HTTPS")
         elif image.startswith("data:") and "," in image:
-            normalized.append(image.split(",", 1)[1])
+            payload = image.split(",", 1)[1]
+            if len(payload) < 1000:
+                raise HTTPException(status_code=400, detail="Uploaded image is empty or corrupted. Please re-select the photo.")
+            normalized.append(payload)
         else:
+            if len(image) < 1000:
+                raise HTTPException(status_code=400, detail="Uploaded image is empty or corrupted. Please re-select the photo.")
             normalized.append(image)
     return normalized
 

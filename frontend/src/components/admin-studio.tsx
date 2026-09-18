@@ -87,13 +87,27 @@ export function AdminStudio({ categories, products, orders, onBack, refresh, sty
   }, [tab]);
 
   const chooseImages = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, selectionLimit: 4, quality: 0.75 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, selectionLimit: 4, quality: 0.7, base64: true });
     if (result.canceled) return;
-    const encoded = await Promise.all(result.assets.slice(0, 4).map(async (asset) => {
-      const blob = await fetch(asset.uri).then((response) => response.blob());
-      return new Promise<string>((resolve) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result).split(",")[1] || ""); reader.readAsDataURL(blob); });
-    }));
+    const encoded: string[] = [];
+    for (const asset of result.assets.slice(0, 4)) {
+      let b64 = asset.base64 || "";
+      if (!b64 && asset.uri) {
+        try {
+          const blob = await (await fetch(asset.uri)).blob();
+          b64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error("read failed"));
+            reader.onloadend = () => resolve(String(reader.result).split(",")[1] || "");
+            reader.readAsDataURL(blob);
+          });
+        } catch { b64 = ""; }
+      }
+      if (b64 && b64.length > 1000) encoded.push(b64);
+    }
+    if (!encoded.length) { setMessage("Could not read the selected photos. Try again from your gallery."); return; }
     setGalleryImages(encoded);
+    setMessage(`${encoded.length} photo${encoded.length === 1 ? "" : "s"} ready to upload.`);
   };
 
   const addProduct = async () => {
