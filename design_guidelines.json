@@ -1,0 +1,190 @@
+{
+  "app_name": "TCH Kitchenware",
+  "personality": "1 iOS-Native Clean (Custom Indian E-Commerce Fusion)",
+  "personality_one_liner": "A clean, premium, and trustworthy Indian kitchenware e-commerce experience featuring deep red accents, dark charcoal typography surfaces, and pristine product photography.",
+  "color": {
+    "surface": "#121212",
+    "onSurface": "#F8FAFC",
+    "surfaceSecondary": "#1E1E1E",
+    "onSurfaceSecondary": "#FFFFFF",
+    "surfaceTertiary": "#2A2A2A",
+    "onSurfaceTertiary": "#E2E8F0",
+    "surfaceInverse": "#FFFFFF",
+    "onSurfaceInverse": "#121212",
+    "brand": "#B91C1C",
+    "brandPrimary": "#DC2626",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#991B1B",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#7F1D1D",
+    "success": "#16A34A",
+    "onSuccess": "#FFFFFF",
+    "warning": "#CA8A04",
+    "onWarning": "#FFFFFF",
+    "error": "#DC2626",
+    "onError": "#FFFFFF",
+    "info": "#2563EB",
+    "onInfo": "#FFFFFF",
+    "border": "#27272A",
+    "borderStrong": "#3F3F46",
+    "divider": "#1E1E1E",
+    "muted": "#94A3B8",
+    "onBrand": "#FFFFFF"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous vertical padding, structured touch targets, clean gutters with 16pt safe margins.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 1,
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use frosted glass header and bottom navigation bar over scrolling product grids.",
+      "Apply subtle translucent white tint over dark charcoal cards for featured items."
+    ],
+    "dont's": [
+      "Do not blur form inputs or checkout summary cards.",
+      "Do not use heavy blur that obscures product thumbnails."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "Display TCH branding, voice search, promotional carousel, category shortcuts, and trending Indian kitchenware collections.",
+      "states": {
+        "loading": "Skeleton pulse loaders on banner and 2-column product grid.",
+        "empty": "Illustration of kitchenware with prompt to explore categories or reset search.",
+        "error": "Error banner with retry button for catalog fetching."
+      },
+      "layout": "Sticky glass header with TCH logo, location selector, notification badge, and cart badge. Search bar with voice icon. Swipeable promotional banner carousel. Horizontal scrollable category pill chips. 2-column product grid for Best Sellers and Trending Items with MRP, discount badge, star ratings, and Add to Cart button."
+    },
+    {
+      "name": "Categories",
+      "purpose": "Browse full inventory of crockware, gift items, jar candy jars, cup saucers, dinner sets, and bulk glassware in a structured grid.",
+      "states": {
+        "loading": "Grid skeleton loaders.",
+        "empty": "No categories found message.",
+        "error": "Retry action."
+      },
+      "layout": "Grid layout showing 14 distinct categories with real thumbnail photography, category title, and active item counts. Clicking any category navigates directly to the filtered product listing."
+    },
+    {
+      "name": "Products",
+      "purpose": "Filterable and sortable 2-column mobile product listing with pagination and stock status indicators.",
+      "states": {
+        "loading": "2-column product card skeleton loaders.",
+        "empty": "No products match your filter criteria.",
+        "error": "Failed to load products. Tap to retry."
+      },
+      "layout": "Top sticky filter bar with price range, discount, rating, and availability toggles, plus sort sheet dropdown. 2-column product grid with image, title, MRP, selling price, discount tag, stock badge, and Add to Cart button."
+    },
+    {
+      "name": "Product Details",
+      "purpose": "Comprehensive product view with image gallery, variant selector, specifications, similar items, and reviews.",
+      "states": {
+        "loading": "Full-screen hero image loader.",
+        "error": "Product details unavailable."
+      },
+      "layout": "Zoom-ready image gallery slider with thumbnail pagination. Product name, rating, discounted Indian Rupee pricing (₹), stock availability pill, material & dimension specs, quantity stepper, and sticky bottom bar with Add to Cart and Buy Now buttons. Followed by Similar Products and Customer Reviews."
+    },
+    {
+      "name": "Cart",
+      "purpose": "Review selected kitchenware items, update quantities, view detailed order summary with Indian taxes and delivery charges.",
+      "states": {
+        "empty": "Cart is empty illustration with 'Start Shopping' CTA.",
+        "loading": "Cart items skeleton."
+      },
+      "layout": "List of cart items with thumbnail, title, variant, quantity +/- steppers, and remove button. Order summary breakdown (Subtotal, Discount, Delivery, Tax, Grand Total in ₹). Sticky bottom container with Continue Shopping and Proceed to Checkout buttons."
+    },
+    {
+      "name": "Checkout",
+      "purpose": "Collect customer details, shipping address, landmark, state, and pincode for Cash on Delivery (COD) orders.",
+      "states": {
+        "loading": "Address fetching loader."
+      },
+      "layout": "Single-column scrollable form with Full Name, Mobile Number, Email, Address, Landmark, City, State, Pincode. Saved address selector. Delivery summary card and sticky 'Place Order' button."
+    },
+    {
+      "name": "Order Confirmation",
+      "purpose": "Confirm successful placement of COD order with order ID, date, and admin tools.",
+      "states": {},
+      "layout": "Success checkmark animation, Order ID, Order date, delivery estimate, item summary, and WhatsApp order sharing button for admins."
+    },
+    {
+      "name": "Orders",
+      "purpose": "View order history, track delivery status, and allow admin to manage inventory, delete dispatched orders, or share via WhatsApp.",
+      "states": {
+        "empty": "No past orders found.",
+        "loading": "Order list skeleton."
+      },
+      "layout": "Chronological list of orders with status badges (Processing, Dispatched, Delivered, Cancelled). Admin mode toggle for category editing, adding 4-photo product galleries via mobile gallery upload, deleting dispatched orders, and WhatsApp sharing."
+    },
+    {
+      "name": "Profile",
+      "purpose": "Customer and Admin authentication state, saved addresses, app settings, and admin mode access.",
+      "states": {},
+      "layout": "User account info card, login/logout toggle for Customer (mobile/email) and Admin (email/password), saved addresses manager, TCH store info, and version details."
+    }
+  ],
+  "images": {
+    "hero_banner": {
+      "url": "https://images.unsplash.com/photo-1774436353542-5091220243c7",
+      "dark": "https://images.unsplash.com/photo-1774436353542-5091220243c7",
+      "alt": "TCH Luxury Kitchenware Promotional Banner"
+    },
+    "category_jar": {
+      "url": "https://images.pexels.com/photos/6794080/pexels-photo-6794080.jpeg",
+      "alt": "Ceramic Jar and Handi Category"
+    },
+    "product_sample": {
+      "url": "https://images.unsplash.com/photo-1548690596-e4d33027b04b",
+      "alt": "Crockery and Gift Item Sample"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Build a production-ready React Native Expo e-commerce app for TCH Kitchenware & Home Products.",
+    "Enforce strict iOS-Native Clean styling with deep red brand accents (#DC2626) and dark charcoal background surfaces (#121212 / #1E1E1E).",
+    "Implement all 5 bottom tabs: Home, Categories, Products, Orders, and Profile with a prominent cart badge in the header.",
+    "Include customer mobile/email authentication and admin email/password login with initial admin account.",
+    "Support complete product catalog management: admin can add products with up to 4 gallery images, manage 14 kitchenware categories, delete dispatched or cancelled orders, and share orders on WhatsApp.",
+    "All prices must be displayed in Indian Rupees (₹) with clear MRP, selling price, and discount percentage.",
+    "Cash on Delivery (COD) checkout flow with full Indian address inputs (Name, Mobile, Address, Landmark, City, State, Pincode)."
+  ]
+}
