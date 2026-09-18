@@ -1,7 +1,7 @@
 import Constants from "expo-constants";
 import { storage } from "@/src/utils/storage";
 
-const baseUrl = `${Constants.expoConfig?.extra?.backendUrl || process.env.EXPO_PUBLIC_BACKEND_URL || ""}/api`;
+const baseUrl = `${Constants.expoConfig?.extra?.backendUrl || process.env.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_BACKEND_URL || ""}/api`;
 
 export type User = { id: string; identifier: string; full_name: string; role: "customer" | "admin"; email?: string };
 export type Category = { id: string; name: string; icon: string; product_count: number };
