@@ -107,7 +107,7 @@ class TestRejectCorruptImages:
         assert "empty or corrupted" in r.json()["detail"].lower()
 
         # confirm no product created with that TEST_ name
-        listing = api.get(f"{BASE_URL}/api/products", timeout=15).json()
+        listing = api.get(f"{BASE_URL}/api/products?limit=100", timeout=15).json()["items"]
         assert all("image validation test" != p.get("description")
                    or p.get("images") != [payload_b64] for p in listing)
 
@@ -153,7 +153,7 @@ class TestAcceptValidBase64:
             assert not stored.startswith("data:")
             assert stored == payload
             # GET back and verify persistence
-            got = api.get(f"{BASE_URL}/api/products", timeout=15).json()
+            got = api.get(f"{BASE_URL}/api/products?limit=100", timeout=15).json()["items"]
             match = [p for p in got if p["id"] == product["id"]][0]
             assert match["images"][0] == payload
         finally:
@@ -239,7 +239,7 @@ class TestHttpsUrlDownload:
             raw = base64.b64decode(stored, validate=True)
             assert len(raw) >= 1000
             # GET path returns it back intact
-            got = api.get(f"{BASE_URL}/api/products", timeout=15).json()
+            got = api.get(f"{BASE_URL}/api/products?limit=100", timeout=15).json()["items"]
             match = [x for x in got if x["id"] == p["id"]][0]
             assert match["images"][0] == stored
         finally:
@@ -289,7 +289,7 @@ class TestPutEnforcesValidation:
 # ---------- tests: existing seeded products (regression) ----------
 class TestSeededProductRegression:
     def test_elight_and_cello_have_images(self, api):
-        rows = api.get(f"{BASE_URL}/api/products", timeout=15).json()
+        rows = api.get(f"{BASE_URL}/api/products?limit=100", timeout=15).json()["items"]
         by_name = {p["name"].strip().lower(): p for p in rows}
 
         elight = by_name.get("elight")
@@ -316,7 +316,7 @@ class TestSeededProductRegression:
                 base64.b64decode(img, validate=False)
 
     def test_cuo_has_empty_images(self, api):
-        rows = api.get(f"{BASE_URL}/api/products", timeout=15).json()
+        rows = api.get(f"{BASE_URL}/api/products?limit=100", timeout=15).json()["items"]
         cuo = next((p for p in rows if p["name"].strip().lower() == "cuo"), None)
         if not cuo:
             pytest.skip("cuo product not in this environment")

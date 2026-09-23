@@ -17,8 +17,13 @@ def test_public_catalog_and_admin_auth():
     assert len(categories.json()) >= 14
     products = requests.get(f"{BASE_URL}/api/products", timeout=15)
     assert products.status_code == 200
-    # Catalog may contain seeded products (cuo, elight, cello Cup saucer); just ensure it's a list
-    assert isinstance(products.json(), list)
+    body = products.json()
+    # New paginated shape
+    assert isinstance(body, dict)
+    assert set(["items", "total", "offset", "limit"]).issubset(body.keys())
+    assert isinstance(body["items"], list)
+    assert body["offset"] == 0
+    assert body["limit"] == 24
     login = requests.post(
         f"{BASE_URL}/api/auth/admin/login",
         json={"identifier": "admin@tch.in", "password": "TCHAdmin@123"},

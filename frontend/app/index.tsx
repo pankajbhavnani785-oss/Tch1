@@ -1,12 +1,14 @@
 // @ts-nocheck
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image as ExpoImage } from "expo-image";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, CartItem, Category, Order, Product, ProductFilters, Review, User, clearSession, loadSession, saveSession } from "@/src/api";
 import { useTheme } from "@/src/theme";
 import { AdminStudio } from "@/src/components/admin-studio";
+import { shareCategory, shareProduct } from "@/src/utils/share";
 
 const money = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
 const imageUri = (source?: string) => source ? (source.startsWith("data:") ? source : `data:image/jpeg;base64,${source}`) : "";
@@ -33,8 +35,8 @@ export default function Index() {
   const refresh = async () => {
     setError("");
     try {
-      const [c, p, o] = await Promise.all([api.categories(), api.products(), api.orders()]);
-      setCategories(c); setProducts(p); setOrders(o);
+      const [c, p, o] = await Promise.all([api.categories(), api.products({ limit: 24, offset: 0 }), api.orders()]);
+      setCategories(c); setProducts(p.items); setOrders(o);
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to load TCH"); }
   };
   const refreshMe = async () => {
@@ -57,7 +59,7 @@ export default function Index() {
 
   const openCategory = async (id: string) => {
     setActiveTab("Products");
-    try { setProducts(await api.products({ category_id: id })); } catch (e) { setError(e instanceof Error ? e.message : "Unable to filter products"); }
+    try { const res = await api.products({ category_id: id, limit: 24, offset: 0 }); setProducts(res.items); } catch (e) { setError(e instanceof Error ? e.message : "Unable to filter products"); }
   };
   const content = activeTab === "Home" ? <Home categories={categories} products={products} onBrowse={() => setActiveTab("Products")} onCategory={openCategory} onProduct={setDetail} onAdd={add} styles={styles} colors={colors} />
     : activeTab === "Categories" ? <Categories categories={categories} onCategory={openCategory} styles={styles} colors={colors} />
@@ -99,12 +101,16 @@ function Page({ children, styles }: any) { return <ScrollView style={styles.scro
 function Search({ value, onChangeText, styles, colors }: any) { return <View style={styles.search}><Ionicons name="search-outline" size={19} color={colors.muted} /><TextInput testID="product-search" value={value} onChangeText={onChangeText} placeholder="Search products..." placeholderTextColor={colors.muted} style={styles.searchInput} /><Ionicons name="mic-outline" size={19} color={colors.brandPrimary} /></View>; }
 function Section({ title, action, onPress, styles }: any) { return <View style={styles.sectionHead}><Text style={styles.sectionTitle}>{title}</Text>{action ? <Pressable onPress={onPress}><Text style={styles.linkText}>{action}</Text></Pressable> : null}</View>; }
 
-function Home({ categories, products, onBrowse, onCategory, onProduct, onAdd, styles, colors }: any) { const [search, setSearch] = useState(""); const visible = products.filter((p: Product) => p.name.toLowerCase().includes(search.toLowerCase())); return <Page styles={styles}><Search value={search} onChangeText={setSearch} styles={styles} colors={colors} /><View style={styles.hero}><View style={styles.heroCopy}><Text style={styles.heroEyebrow}>TCH COLLECTION</Text><Text style={styles.heroTitle}>Beautiful pieces for everyday moments.</Text><Text style={styles.heroText}>Curated crockery and gifts for your home.</Text><Pressable testID="shop-now" style={styles.heroButton} onPress={onBrowse}><Text style={styles.heroButtonText}>Shop now</Text><Ionicons name="arrow-forward" size={16} color={colors.onBrandPrimary} /></Pressable></View><Ionicons name="wine-outline" size={90} color={colors.onBrandPrimary} /></View><Section title="Shop by category" action="See all" onPress={() => {}} styles={styles} /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>{categories.slice(0, 8).map((category: Category) => <Pressable key={category.id} style={styles.categoryChip} onPress={() => onCategory(category.id)}><View style={styles.categoryIcon}><Ionicons name="grid-outline" size={20} color={colors.brandPrimary} /></View><Text style={styles.categoryName} numberOfLines={2}>{category.name}</Text></Pressable>)}</ScrollView><Section title="Featured picks" action="View all" onPress={onBrowse} styles={styles} />{visible.length ? <View style={styles.grid}>{visible.slice(0, 6).map((p: Product) => <Card key={p.id} product={p} onPress={() => onProduct(p)} onAdd={() => onAdd(p)} styles={styles} colors={colors} />)}</View> : <Empty icon="sparkles-outline" title="Your next favorite piece starts here" text="Our catalog is being curated. Browse categories or check back soon." styles={styles} colors={colors} />}</Page>; }
+function Home({ categories, products, onBrowse, onCategory, onProduct, onAdd, styles, colors }: any) { const [search, setSearch] = useState(""); const visible = products.filter((p: Product) => p.name.toLowerCase().includes(search.toLowerCase())); return <Page styles={styles}><Search value={search} onChangeText={setSearch} styles={styles} colors={colors} /><View style={styles.hero}><View style={styles.heroCopy}><Text style={styles.heroEyebrow}>TCH COLLECTION</Text><Text style={styles.heroTitle}>Beautiful pieces for everyday moments.</Text><Text style={styles.heroText}>Curated crockery and gifts for your home.</Text><Pressable testID="shop-now" style={styles.heroButton} onPress={onBrowse}><Text style={styles.heroButtonText}>Shop now</Text><Ionicons name="arrow-forward" size={16} color={colors.onBrandPrimary} /></Pressable></View><Ionicons name="wine-outline" size={90} color={colors.onBrandPrimary} /></View><Section title="Shop by category" action="See all" onPress={() => {}} styles={styles} /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>{categories.slice(0, 8).map((category: Category) => <Pressable key={category.id} style={styles.categoryChip} onPress={() => onCategory(category.id)}><View style={styles.categoryIcon}><Ionicons name="grid-outline" size={20} color={colors.brandPrimary} /></View><Text style={styles.categoryName} numberOfLines={2}>{category.name}</Text></Pressable>)}</ScrollView><Section title="Featured picks" action="View all" onPress={onBrowse} styles={styles} />{visible.length ? <View style={styles.grid}>{visible.slice(0, 6).map((p: Product) => <Card key={p.id} product={p} onPress={() => onProduct(p)} onAdd={() => onAdd(p)} onShare={() => shareProduct(p)} styles={styles} colors={colors} />)}</View> : <Empty icon="sparkles-outline" title="Your next favorite piece starts here" text="Our catalog is being curated. Browse categories or check back soon." styles={styles} colors={colors} />}</Page>; }
 
-function Categories({ categories, onCategory, styles, colors }: any) { return <Page styles={styles}><Text style={styles.pageTitle}>Categories</Text><Text style={styles.pageSubtitle}>Find something made for your space.</Text><View style={styles.categoryGrid}>{categories.map((category: Category) => <Pressable key={category.id} style={styles.categoryCard} onPress={() => onCategory(category.id)}><View style={styles.categoryLargeIcon}><Ionicons name="grid-outline" size={26} color={colors.brandPrimary} /></View><Text style={styles.categoryCardTitle}>{category.name}</Text><Text style={styles.muted}>{category.product_count} products</Text></Pressable>)}</View></Page>; }
+function Categories({ categories, onCategory, styles, colors }: any) { return <Page styles={styles}><Text style={styles.pageTitle}>Categories</Text><Text style={styles.pageSubtitle}>Find something made for your space.</Text><View style={styles.categoryGrid}>{categories.map((category: Category) => <Pressable key={category.id} style={styles.categoryCard} onPress={() => onCategory(category.id)}><View style={styles.categoryCardHead}><View style={styles.categoryLargeIcon}><Ionicons name="grid-outline" size={26} color={colors.brandPrimary} /></View><Pressable testID={`share-cat-${category.id}`} hitSlop={8} style={styles.categoryShare} onPress={() => shareCategory(category)}><Ionicons name="share-social-outline" size={16} color={colors.onSurface} /></Pressable></View><Text style={styles.categoryCardTitle}>{category.name}</Text><Text style={styles.muted}>{category.product_count} products</Text></Pressable>)}</View></Page>; }
 
 function Products({ products, setProducts, categories, onProduct, onAdd, styles, colors }: any) {
+  const PAGE = 20;
+  const [items, setItems] = useState<Product[]>(products || []);
+  const [total, setTotal] = useState<number>(products?.length || 0);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [showFilters, setShowFilters] = useState(false);
   const [minPrice, setMinPrice] = useState("");
@@ -113,31 +119,75 @@ function Products({ products, setProducts, categories, onProduct, onAdd, styles,
   const [minDiscount, setMinDiscount] = useState(0);
   const [available, setAvailable] = useState(false);
   const [category, setCategory] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [firstLoaded, setFirstLoaded] = useState(false);
+  const requestId = useRef(0);
 
-  const apply = async () => {
-    setBusy(true);
+  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search.trim()), 300); return () => clearTimeout(t); }, [search]);
+
+  const buildFilters = (offset: number): ProductFilters => ({ search: debouncedSearch || undefined, sort, category_id: category || undefined, available: available || undefined, min_price: Number(minPrice) || 0, max_price: Number(maxPrice) || 0, min_rating: minRating, min_discount: minDiscount, limit: PAGE, offset });
+
+  const load = async (append: boolean) => {
+    const id = ++requestId.current;
+    if (append) setLoadingMore(true); else setLoading(true);
     try {
-      const filters: ProductFilters = { search: search || undefined, sort, category_id: category || undefined, available, min_price: Number(minPrice) || 0, max_price: Number(maxPrice) || 0, min_rating: minRating, min_discount: minDiscount };
-      setProducts(await api.products(filters));
-    } finally { setBusy(false); }
+      const res = await api.products(buildFilters(append ? items.length : 0));
+      if (id !== requestId.current) return;
+      const next = append ? [...items, ...res.items] : res.items;
+      setItems(next); setTotal(res.total);
+      if (!append) setProducts(res.items);
+      setFirstLoaded(true);
+    } catch { /* ignore */ } finally {
+      if (append) setLoadingMore(false); else setLoading(false);
+    }
   };
-  const reset = async () => { setSearch(""); setSort("newest"); setMinPrice(""); setMaxPrice(""); setMinRating(0); setMinDiscount(0); setAvailable(false); setCategory(""); setProducts(await api.products({})); };
-  const active = (minPrice || maxPrice || minRating || minDiscount || available || category) ? 1 : 0;
 
-  return <Page styles={styles}>
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(false); }, [debouncedSearch, sort, category, minPrice, maxPrice, minRating, minDiscount, available]);
+
+  const onEndReached = () => { if (loading || loadingMore || items.length >= total) return; load(true); };
+  const reset = () => { setSearch(""); setSort("newest"); setMinPrice(""); setMaxPrice(""); setMinRating(0); setMinDiscount(0); setAvailable(false); setCategory(""); };
+  const activeFilters = (minPrice || maxPrice || minRating || minDiscount || available || category) ? 1 : 0;
+
+  const Header = <View>
     <Text style={styles.pageTitle}>Products</Text>
+    <Text style={styles.pageSubtitle}>{total ? `${total} pieces waiting for you` : firstLoaded ? "Try a different search or filter" : "Loading catalog..."}</Text>
     <Search value={search} onChangeText={setSearch} styles={styles} colors={colors} />
     <View style={styles.sortRow}>
       <ScrollView horizontal contentContainerStyle={styles.horizontal} showsHorizontalScrollIndicator={false}>
         {[["newest", "Newest"], ["price_low", "Price low"], ["price_high", "Price high"], ["rating", "Top rated"], ["popular", "Popular"]].map(([value, label]) => <Pressable testID={`sort-${value}`} key={value} style={[styles.filterPill, sort === value && styles.filterPillActive]} onPress={() => setSort(value)}><Text style={[styles.filterText, sort === value && styles.filterTextActive]}>{label}</Text></Pressable>)}
       </ScrollView>
-      <Pressable testID="open-filters" style={[styles.filterIcon, active ? styles.filterIconActive : null]} onPress={() => setShowFilters(true)}>
-        <Ionicons name="options-outline" size={20} color={active ? colors.onBrandPrimary : colors.onSurface} />
+      <Pressable testID="open-filters" style={[styles.filterIcon, activeFilters ? styles.filterIconActive : null]} onPress={() => setShowFilters(true)}>
+        <Ionicons name="options-outline" size={20} color={activeFilters ? colors.onBrandPrimary : colors.onSurface} />
       </Pressable>
     </View>
-    <Pressable style={styles.applyRow} onPress={apply}><Text style={styles.linkText}>{busy ? "Loading..." : "Apply search & sort"}</Text></Pressable>
-    {products.length ? <View style={styles.grid}>{products.map((product: Product) => <Card key={product.id} product={product} onPress={() => onProduct(product)} onAdd={() => onAdd(product)} styles={styles} colors={colors} />)}</View> : <Empty icon="search-outline" title="No products found" text="Try another search or adjust filters." styles={styles} colors={colors} />}
+  </View>;
+
+  const Footer = loadingMore ? <View style={styles.footerLoader}><ActivityIndicator color={colors.brandPrimary} /></View>
+    : firstLoaded && items.length && items.length >= total ? <Text style={styles.endOfList}>You&apos;ve reached the end · {items.length} of {total} products</Text>
+    : null;
+
+  return <View style={styles.flex}>
+    <FlatList
+      data={items}
+      keyExtractor={(item) => item.id}
+      numColumns={2}
+      columnWrapperStyle={styles.gridRow}
+      contentContainerStyle={styles.page}
+      ListHeaderComponent={Header}
+      ListEmptyComponent={loading ? <View style={styles.footerLoader}><ActivityIndicator color={colors.brandPrimary} /></View>
+        : firstLoaded ? <Empty icon="search-outline" title="No products found" text="Try another search or adjust filters." styles={styles} colors={colors} /> : null}
+      ListFooterComponent={Footer}
+      renderItem={({ item }) => <Card product={item} onPress={() => onProduct(item)} onAdd={() => onAdd(item)} onShare={() => shareProduct(item)} styles={styles} colors={colors} />}
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.4}
+      initialNumToRender={12}
+      maxToRenderPerBatch={12}
+      windowSize={7}
+      removeClippedSubviews
+      keyboardShouldPersistTaps="handled"
+    />
     <Modal visible={showFilters} animationType="slide" transparent onRequestClose={() => setShowFilters(false)}>
       <View style={styles.modalBackdrop}>
         <View style={styles.filterSheet}>
@@ -168,23 +218,24 @@ function Products({ products, setProducts, categories, onProduct, onAdd, styles,
           </ScrollView>
           <View style={styles.sheetActions}>
             <Pressable testID="filter-reset" style={styles.secondaryButton} onPress={() => { reset(); setShowFilters(false); }}><Text style={styles.secondaryButtonText}>Reset</Text></Pressable>
-            <Pressable testID="filter-apply" style={styles.primaryButtonSmall} onPress={() => { apply(); setShowFilters(false); }}><Text style={styles.primaryButtonText}>Apply filters</Text></Pressable>
+            <Pressable testID="filter-apply" style={styles.primaryButtonSmall} onPress={() => setShowFilters(false)}><Text style={styles.primaryButtonText}>Apply filters</Text></Pressable>
           </View>
         </View>
       </View>
     </Modal>
-  </Page>;
+  </View>;
 }
 
-function Card({ product, onPress, onAdd, styles, colors }: any) {
+function Card({ product, onPress, onAdd, onShare, styles, colors }: any) {
   const low = product.stock > 0 && product.stock <= 10;
   return <Pressable style={styles.productCard} onPress={onPress}>
     <View style={styles.productImage}>
-      {product.images?.[0] ? <Image source={{ uri: imageUri(product.images[0]) }} style={styles.image} /> : <Ionicons name="cube-outline" size={42} color={colors.brandPrimary} />}
+      {product.images?.[0] ? <ExpoImage source={{ uri: imageUri(product.images[0]) }} style={styles.image} contentFit="cover" cachePolicy="memory-disk" transition={150} /> : <Ionicons name="cube-outline" size={42} color={colors.brandPrimary} />}
       {sale(product) ? <View style={styles.discount}><Text style={styles.discountText}>{sale(product)}</Text></View> : null}
       {product.stock === 0 ? <View style={[styles.stockPill, { backgroundColor: colors.error }]}><Text style={[styles.stockPillText, { color: colors.onError }]}>OUT</Text></View>
         : low ? <View style={[styles.stockPill, { backgroundColor: colors.warning }]}><Text style={[styles.stockPillText, { color: colors.onWarning }]}>Only {product.stock} left</Text></View>
           : null}
+      {onShare ? <Pressable testID={`share-${product.id}`} hitSlop={8} style={styles.cardShare} onPress={onShare}><Ionicons name="share-social-outline" size={16} color={colors.onSurface} /></Pressable> : null}
     </View>
     <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
     <Text style={styles.productDesc} numberOfLines={1}>{product.description || "TCH kitchenware"}</Text>
@@ -220,13 +271,13 @@ function Detail({ product, products, onBack, onAdd, onOpen, styles, colors }: an
     } catch (e) { setMessage(e instanceof Error ? e.message : "Could not submit review"); } finally { setBusy(false); }
   };
   return <View style={styles.root}>
-    <Top title="Product details" onBack={onBack} styles={styles} colors={colors} />
+    <TopWithAction title="Product details" onBack={onBack} rightIcon="share-social-outline" onRight={() => shareProduct(product)} rightTestId="share-product-button" styles={styles} colors={colors} />
     <ScrollView contentContainerStyle={styles.detailPage}>
       <Pressable onPress={() => product.images?.length && setZoom(true)} style={styles.detailImage}>
-        {product.images?.length ? <Image source={{ uri: imageUri(product.images[active]) }} style={styles.detailImageAsset} /> : <Ionicons name="cube-outline" size={80} color={colors.brandPrimary} />}
+        {product.images?.length ? <ExpoImage source={{ uri: imageUri(product.images[active]) }} style={styles.detailImageAsset} contentFit="contain" cachePolicy="memory-disk" transition={200} /> : <Ionicons name="cube-outline" size={80} color={colors.brandPrimary} />}
         {product.images?.length ? <View style={styles.zoomHint}><Ionicons name="search" size={13} color={colors.onBrandPrimary} /><Text style={styles.zoomHintText}>Tap to zoom</Text></View> : null}
       </Pressable>
-      {product.images?.length > 1 ? <ScrollView horizontal contentContainerStyle={styles.thumbs}>{product.images.map((source: string, index: number) => <Pressable key={source} style={[styles.thumb, active === index && styles.thumbActive]} onPress={() => setActive(index)}><Image source={{ uri: imageUri(source) }} style={styles.thumbImage} /></Pressable>)}</ScrollView> : null}
+      {product.images?.length > 1 ? <ScrollView horizontal contentContainerStyle={styles.thumbs}>{product.images.map((source: string, index: number) => <Pressable key={source} style={[styles.thumb, active === index && styles.thumbActive]} onPress={() => setActive(index)}><ExpoImage source={{ uri: imageUri(source) }} style={styles.thumbImage} contentFit="cover" cachePolicy="memory-disk" /></Pressable>)}</ScrollView> : null}
       <Text style={styles.detailTitle}>{product.name}</Text>
       <Text style={styles.ratingLarge}>★ {product.rating.toFixed(1)}  <Text style={styles.muted}>{reviews.length} review{reviews.length === 1 ? "" : "s"}</Text></Text>
       <View style={styles.detailPrice}><Text style={styles.detailPriceValue}>{money(product.price)}</Text>{product.mrp > product.price ? <><Text style={styles.mrp}>{money(product.mrp)}</Text><Text style={styles.discountText}>{sale(product)}</Text></> : null}</View>
@@ -279,6 +330,13 @@ function Detail({ product, products, onBack, onAdd, onOpen, styles, colors }: an
 }
 function Spec({ label, value, styles }: any) { return <View style={styles.spec}><Text style={styles.muted}>{label}</Text><Text style={styles.specValue}>{value}</Text></View>; }
 function Top({ title, onBack, styles, colors }: any) { return <View style={styles.detailHeader}><Pressable style={styles.iconButton} onPress={onBack}><Ionicons name="arrow-back" size={22} color={colors.onSurface} /></Pressable><Text style={styles.headerTitle}>{title}</Text><View style={styles.iconButton} /></View>; }
+function TopWithAction({ title, onBack, rightIcon, onRight, rightTestId, styles, colors }: any) {
+  return <View style={styles.detailHeader}>
+    <Pressable style={styles.iconButton} onPress={onBack}><Ionicons name="arrow-back" size={22} color={colors.onSurface} /></Pressable>
+    <Text style={styles.headerTitle}>{title}</Text>
+    <Pressable testID={rightTestId} style={styles.iconButton} onPress={onRight}><Ionicons name={rightIcon} size={22} color={colors.brandPrimary} /></Pressable>
+  </View>;
+}
 
 function Cart({ cart, subtotal, onBack, onChange, onCheckout, styles, colors }: any) { return <View style={styles.root}><Top title="Your cart" onBack={onBack} styles={styles} colors={colors} /><ScrollView contentContainerStyle={styles.page}>{cart.length ? cart.map((item: CartItem) => <View style={styles.cartItem} key={item.id}><View style={styles.cartImage}>{item.images?.[0] ? <Image source={{ uri: imageUri(item.images[0]) }} style={styles.image} /> : <Ionicons name="cube-outline" size={30} color={colors.brandPrimary} />}</View><View style={styles.cartInfo}><Text style={styles.productName} numberOfLines={2}>{item.name}</Text><Text style={styles.price}>{money(item.price)}</Text><View style={styles.quantity}><Pressable style={styles.quantityButton} onPress={() => onChange(item.id, -1)}><Ionicons name="remove" size={17} color={colors.onSurface} /></Pressable><Text style={styles.quantityText}>{item.quantity}</Text><Pressable style={styles.quantityButton} onPress={() => onChange(item.id, 1)}><Ionicons name="add" size={17} color={colors.onSurface} /></Pressable></View></View><Text style={styles.cartTotal}>{money(item.price * item.quantity)}</Text></View>) : <Empty icon="bag-handle-outline" title="Your cart is waiting" text="Add pieces you love and they'll show up here." styles={styles} colors={colors} />}<Summary subtotal={subtotal} styles={styles} colors={colors} /></ScrollView>{cart.length ? <View style={styles.bottomAction}><Pressable testID="checkout-button" style={styles.primaryButton} onPress={onCheckout}><Text style={styles.primaryButtonText}>Proceed to checkout · {money(subtotal)}</Text></Pressable></View> : null}</View>; }
 function Summary({ subtotal, styles, colors }: any) { return <View style={styles.summary}><Text style={styles.sectionTitle}>Order summary</Text><Line label="Subtotal" value={money(subtotal)} styles={styles} /><Line label="Delivery" value="Free" styles={styles} /><View style={styles.summaryDivider} /><Line label="Grand total" value={money(subtotal)} bold styles={styles} /><View style={styles.cod}><Ionicons name="cash-outline" size={20} color={colors.success} /><Text style={styles.codText}>Cash on Delivery available</Text></View></View>; }
@@ -401,6 +459,12 @@ function createStyles(colors: any) { return StyleSheet.create({
   manageThumb: { width: 60, height: 60, borderRadius: 12, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   stockPill: { position: "absolute", right: 7, top: 7, borderRadius: 7, paddingHorizontal: 6, paddingVertical: 4 },
   stockPillText: { fontSize: 9, fontWeight: "800" },
+  cardShare: { position: "absolute", right: 7, bottom: 7, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 2 },
+  gridRow: { justifyContent: "space-between", marginBottom: 12 },
+  footerLoader: { paddingVertical: 24, alignItems: "center" },
+  endOfList: { textAlign: "center", color: colors.muted, fontSize: 12, paddingVertical: 22 },
+  categoryCardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  categoryShare: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   statGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 24 },
   statCard: { width: "48%", padding: 16, borderRadius: 16, gap: 6, minHeight: 110, justifyContent: "space-between" },
   statCardOutline: { width: "48%", padding: 16, borderRadius: 16, gap: 6, minHeight: 110, backgroundColor: colors.surfaceSecondary, justifyContent: "space-between" },

@@ -214,6 +214,14 @@ async def seed_defaults() -> None:
     for name in DEFAULT_CATEGORIES:
         if not await db.categories.find_one({"name": name}, {"_id": 0}):
             await db.categories.insert_one({"id": str(uuid.uuid4()), "name": name, "icon": "grid-outline", "created_at": now_iso()})
+    # Text index for fast product search at scale (5000+ products)
+    try:
+        await db.products.create_index([("name", "text"), ("description", "text")])
+        await db.products.create_index([("category_id", 1)])
+        await db.products.create_index([("price", 1)])
+        await db.products.create_index([("created_at", -1)])
+    except Exception as exc:
+        logger.warning("Could not create product indexes: %s", exc)
 
 
 @api.get("/")
@@ -317,7 +325,7 @@ async def update_category(category_id: str, payload: CategoryInput, authorizatio
 
 
 @api.get("/products")
-async def products(search: str = "", category_id: str = "", sort: str = "newest", available: bool = False, min_price: float = 0, max_price: float = 0, min_rating: float = 0, min_discount: float = 0) -> List[dict]:
+async def products(search: str = "", category_id: str = "", sort: str = "newest", available: bool = False, min_price: float = 0, max_price: float = 0, min_rating: float = 0, min_discount: float = 0, limit: int = 24, offset: int = 0) -> dict:
     query: dict[str, Any] = {}
     if search:
         query["$or"] = [{"name": {"$regex": search, "$options": "i"}}, {"description": {"$regex": search, "$options": "i"}}]
@@ -331,12 +339,18 @@ async def products(search: str = "", category_id: str = "", sort: str = "newest"
         query.setdefault("price", {})["$lte"] = max_price
     if min_rating > 0:
         query["rating"] = {"$gte": min_rating}
+    if min_discount > 0:
+        query["$expr"] = {"$and": [
+            {"$gt": ["$mrp", 0]},
+            {"$gte": [{"$multiply": [{"$divide": [{"$subtract": ["$mrp", "$price"]}, "$mrp"]}, 100]}, min_discount]},
+        ]}
     sort_field = {"price_low": "price", "price_high": "price", "rating": "rating", "popular": "sold_count"}.get(sort, "created_at")
     direction = 1 if sort == "price_low" else -1
-    rows = await db.products.find(query, {"_id": 0}).sort(sort_field, direction).to_list(500)
-    if min_discount > 0:
-        rows = [row for row in rows if row.get("mrp", 0) > 0 and ((row["mrp"] - row["price"]) / row["mrp"]) * 100 >= min_discount]
-    return rows
+    safe_limit = max(1, min(int(limit or 24), 100))
+    safe_offset = max(0, int(offset or 0))
+    total = await db.products.count_documents(query)
+    rows = await db.products.find(query, {"_id": 0}).sort(sort_field, direction).skip(safe_offset).limit(safe_limit).to_list(safe_limit)
+    return {"items": rows, "total": total, "offset": safe_offset, "limit": safe_limit}
 
 
 @api.post("/products")

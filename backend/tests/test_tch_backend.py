@@ -247,7 +247,7 @@ class TestPatchProducts:
         assert r.status_code == 200
         assert r.json()["stock"] == 42
         # verify persisted
-        got = api.get(f"{BASE_URL}/api/products", timeout=15).json()
+        got = api.get(f"{BASE_URL}/api/products?limit=100", timeout=15).json()["items"]
         match = [x for x in got if x["id"] == sample_product["id"]][0]
         assert match["stock"] == 42
 
@@ -337,7 +337,7 @@ class TestReviews:
         assert lst.status_code == 200
         assert len(lst.json()) >= 1
         # avg rating updated on product
-        prods = api.get(f"{BASE_URL}/api/products", timeout=15).json()
+        prods = api.get(f"{BASE_URL}/api/products?limit=100", timeout=15).json()["items"]
         prod = [p for p in prods if p["id"] == pid][0]
         assert prod["rating"] == 4.0  # only one review -> avg == 4
 
@@ -381,46 +381,50 @@ class TestProductFilters:
     def _names(self, rows):
         return {r["name"] for r in rows if r["name"].startswith("TEST_f_")}
 
+    def _items(self, resp):
+        body = resp.json()
+        return body["items"] if isinstance(body, dict) else body
+
     def test_min_max_price(self, api, seeded_products):
-        r = api.get(f"{BASE_URL}/api/products?min_price=200&max_price=600", timeout=15)
+        r = api.get(f"{BASE_URL}/api/products?min_price=200&max_price=600&limit=100", timeout=15)
         assert r.status_code == 200
-        names = self._names(r.json())
+        names = self._names(self._items(r))
         assert "TEST_f_mid" in names and "TEST_f_disc" in names
         assert "TEST_f_cheap" not in names and "TEST_f_high" not in names
 
     def test_min_rating(self, api, seeded_products):
-        r = api.get(f"{BASE_URL}/api/products?min_rating=4.5", timeout=15)
-        names = self._names(r.json())
+        r = api.get(f"{BASE_URL}/api/products?min_rating=4.5&limit=100", timeout=15)
+        names = self._names(self._items(r))
         assert "TEST_f_mid" in names and "TEST_f_disc" in names
         assert "TEST_f_cheap" not in names
 
     def test_available_only(self, api, seeded_products):
-        r = api.get(f"{BASE_URL}/api/products?available=true", timeout=15)
-        names = self._names(r.json())
+        r = api.get(f"{BASE_URL}/api/products?available=true&limit=100", timeout=15)
+        names = self._names(self._items(r))
         assert "TEST_f_mid" not in names  # stock 0
         assert "TEST_f_cheap" in names
 
     def test_min_discount(self, api, seeded_products):
         # only TEST_f_disc has 50% off; TEST_f_cheap has 50% off too (200->100)
-        r = api.get(f"{BASE_URL}/api/products?min_discount=40", timeout=15)
-        names = self._names(r.json())
+        r = api.get(f"{BASE_URL}/api/products?min_discount=40&limit=100", timeout=15)
+        names = self._names(self._items(r))
         assert "TEST_f_disc" in names and "TEST_f_cheap" in names
         assert "TEST_f_mid" not in names  # 20% only
         assert "TEST_f_high" not in names  # 25% only
 
     def test_sort_price_low(self, api, seeded_products):
-        r = api.get(f"{BASE_URL}/api/products?sort=price_low", timeout=15)
-        prices = [p["price"] for p in r.json()]
+        r = api.get(f"{BASE_URL}/api/products?sort=price_low&limit=100", timeout=15)
+        prices = [p["price"] for p in self._items(r)]
         assert prices == sorted(prices)
 
     def test_sort_price_high(self, api, seeded_products):
-        r = api.get(f"{BASE_URL}/api/products?sort=price_high", timeout=15)
-        prices = [p["price"] for p in r.json()]
+        r = api.get(f"{BASE_URL}/api/products?sort=price_high&limit=100", timeout=15)
+        prices = [p["price"] for p in self._items(r)]
         assert prices == sorted(prices, reverse=True)
 
     def test_sort_rating(self, api, seeded_products):
-        r = api.get(f"{BASE_URL}/api/products?sort=rating", timeout=15)
-        ratings = [p["rating"] for p in r.json()]
+        r = api.get(f"{BASE_URL}/api/products?sort=rating&limit=100", timeout=15)
+        ratings = [p["rating"] for p in self._items(r)]
         assert ratings == sorted(ratings, reverse=True)
 
 

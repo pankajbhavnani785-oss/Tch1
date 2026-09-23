@@ -11,7 +11,8 @@ export type Order = { id: string; items: { product_id: string; name: string; ima
 export type StockEvent = { id: string; product_id: string; quantity: number; operation: "add" | "set"; note: string; created_at: string };
 export type Review = { id: string; product_id: string; user_id: string; user_name: string; rating: number; comment: string; created_at: string };
 export type DashboardStats = { today_orders: number; today_revenue: number; active_orders: number; total_delivered: number; total_revenue: number; low_stock: Product[]; pending_users: number; total_products: number };
-export type ProductFilters = { search?: string; category_id?: string; sort?: string; available?: boolean; min_price?: number; max_price?: number; min_rating?: number; min_discount?: number };
+export type ProductsPage = { items: Product[]; total: number; offset: number; limit: number };
+export type ProductFilters = { search?: string; category_id?: string; sort?: string; available?: boolean; min_price?: number; max_price?: number; min_rating?: number; min_discount?: number; limit?: number; offset?: number };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await storage.secureGet("tch_token", "");
@@ -38,7 +39,7 @@ export const api = {
   register: (identifier: string, password: string, full_name: string) => request<{ token: string; user: User }>("/auth/register", { method: "POST", body: JSON.stringify({ identifier, password, full_name, email: identifier.includes("@") ? identifier : undefined }) }),
   me: () => request<User>("/auth/me"),
   categories: () => request<Category[]>("/categories"),
-  products: (filters: ProductFilters = {}) => request<Product[]>(`/products${buildQuery(filters)}`),
+  products: (filters: ProductFilters = {}) => request<ProductsPage>(`/products${buildQuery(filters)}`),
   createCategory: (name: string) => request<Category>("/categories", { method: "POST", body: JSON.stringify({ name, icon: "grid-outline" }) }),
   updateCategory: (id: string, name: string) => request<Category>(`/categories/${id}`, { method: "PUT", body: JSON.stringify({ name, icon: "grid-outline" }) }),
   createProduct: (product: Omit<Product, "id" | "sold_count">) => request<Product>("/products", { method: "POST", body: JSON.stringify(product) }),
