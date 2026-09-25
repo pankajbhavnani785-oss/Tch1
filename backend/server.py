@@ -177,7 +177,14 @@ def normalize_images(images: List[str]) -> List[str]:
 async def auth_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> dict:
-    if not credentials or credentials.scheme.lower() != "bearer":
+
+    if not credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required"
+        )
+
+    if credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=401,
             detail="Authentication required"
@@ -212,6 +219,7 @@ async def auth_user(
 async def approved_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> dict:
+
     user = await auth_user(credentials)
 
     if user.get("role") == "admin":
@@ -229,6 +237,7 @@ async def approved_user(
 async def admin_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> dict:
+
     user = await auth_user(credentials)
 
     if user.get("role") != "admin":
