@@ -11,7 +11,6 @@ import bcrypt
 import jwt
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, Header, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.middleware.cors import CORSMiddleware
