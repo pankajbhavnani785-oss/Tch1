@@ -10,7 +10,8 @@ import uuid
 import bcrypt
 import jwt
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, Header, HTTPException
+from fastapi import APIRouter, FastAPI, Header, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.middleware.cors import CORSMiddleware
@@ -25,6 +26,7 @@ JWT_SECRET = os.environ["JWT_SECRET"]
 app = FastAPI(title="TCH Kitchenware API")
 api = APIRouter(prefix="/api")
 logger = logging.getLogger("tch")
+security = HTTPBearer(auto_error=False)
 
 DEFAULT_CATEGORIES = [
     "New Arrivals", "Gift Items", "Return Gifts", "Jar or Candy Jar", "Cup and Saucers",
@@ -173,11 +175,30 @@ def normalize_images(images: List[str]) -> List[str]:
     return normalized
 
 
-async def auth_user(authorization: Optional[str]) -> dict:
-    if not authorization or not authorization.startswith("Bearer "):
+async def auth_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> dict:
+    if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail="Authentication required")
+
     try:
-        payload = jwt.decode(authorization.split(" ", 1)[1], JWT_SECRET, algorithms=["HS256"])
+        payload = jwt.decode(
+            credentials.credentials,
+            JWT_SECRET,
+            algorithms=["HS256"]
+        )
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid session") from exc
+
+    user = await db.users.find_one(
+        {"id": payload.get("sub")},
+        {"_id": 0}
+    )
+
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    return user
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail="Invalid session") from exc
     user = await db.users.find_one({"id": payload.get("sub")}, {"_id": 0})
@@ -186,8 +207,10 @@ async def auth_user(authorization: Optional[str]) -> dict:
     return user
 
 
-async def approved_user(authorization: Optional[str]) -> dict:
-    user = await auth_user(authorization)
+async def approved_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> dict:
+    user = await auth_user(credentials)
     if user.get("role") == "admin":
         return user
     if not user.get("is_approved", False):
@@ -195,8 +218,10 @@ async def approved_user(authorization: Optional[str]) -> dict:
     return user
 
 
-async def admin_user(authorization: Optional[str]) -> dict:
-    user = await auth_user(authorization)
+async def admin_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> dict:
+    user = await auth_user(credentials)
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
@@ -260,9 +285,11 @@ async def admin_login(payload: AuthInput) -> dict:
     return {"token": token_for(safe), "user": safe}
 
 
-@api.get("/auth/me")
-async def me(authorization: Optional[str] = Header(default=None)) -> dict:
-    user = await auth_user(authorization)
+    @api.get("/auth/me")
+async def me(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> dict:
+    user = await auth_user(credentials)
     return safe_user(user)
 
 
