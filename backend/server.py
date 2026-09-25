@@ -315,8 +315,11 @@ async def me(
     return safe_user(user)
 
 @api.get("/users")
-async def list_users(status: str = "pending", authorization: Optional[str] = Header(default=None)) -> List[dict]:
-    await admin_user(authorization)
+async def list_users(
+    status: str = "pending",
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> List[dict]:
+    await admin_user(credentials)
     query: dict = {"role": "customer"}
     if status == "pending":
         query["is_approved"] = False
@@ -327,8 +330,11 @@ async def list_users(status: str = "pending", authorization: Optional[str] = Hea
 
 
 @api.post("/users/{user_id}/approve")
-async def approve_customer(user_id: str, authorization: Optional[str] = Header(default=None)) -> dict:
-    await admin_user(authorization)
+async def approve_customer(
+    user_id: str,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> dict:
+    await admin_user(credentials)
     result = await db.users.update_one({"id": user_id, "role": "customer"}, {"$set": {"is_approved": True, "approved_at": now_iso()}})
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="Customer not found")
@@ -337,8 +343,11 @@ async def approve_customer(user_id: str, authorization: Optional[str] = Header(d
 
 
 @api.post("/users/{user_id}/reject")
-async def reject_customer(user_id: str, authorization: Optional[str] = Header(default=None)) -> dict:
-    await admin_user(authorization)
+async def reject_customer(
+    user_id: str,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> dict:
+    await admin_user(credentials)
     result = await db.users.delete_one({"id": user_id, "role": "customer"})
     if not result.deleted_count:
         raise HTTPException(status_code=404, detail="Customer not found")
