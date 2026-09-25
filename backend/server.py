@@ -12,7 +12,6 @@ import jwt
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, Header, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.middleware.cors import CORSMiddleware
@@ -180,7 +179,10 @@ async def auth_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> dict:
     if not credentials or credentials.scheme.lower() != "bearer":
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required"
+        )
 
     try:
         payload = jwt.decode(
@@ -189,7 +191,10 @@ async def auth_user(
             algorithms=["HS256"]
         )
     except jwt.PyJWTError as exc:
-        raise HTTPException(status_code=401, detail="Invalid session") from exc
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid session"
+        ) from exc
 
     user = await db.users.find_one(
         {"id": payload.get("sub")},
@@ -197,7 +202,10 @@ async def auth_user(
     )
 
     if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(
+            status_code=401,
+            detail="User not found"
+        )
 
     return user
 
@@ -207,11 +215,30 @@ async def approved_user(
 ) -> dict:
     user = await auth_user(credentials)
 
+    if user.get("role") == "admin":
+        return user
+
+    if not user.get("is_approved", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is waiting for admin approval. Contact TCH support on WhatsApp."
+        )
+
+    return user
+
 
 async def admin_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> dict:
     user = await auth_user(credentials)
+
+    if user.get("role") != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required"
+        )
+
+    return user
 
 
 @app.on_event("startup")
