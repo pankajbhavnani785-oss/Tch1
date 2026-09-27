@@ -320,77 +320,7 @@ async def root() -> dict:
     return {"message": "TCH Kitchenware API"}
 
 
-@api.post("/auth/register")
-async def register(payload: RegisterInput) -> dict:
-    try:
-        logger.info("REGISTER START: identifier=%s", payload.identifier)
-
-        existing = await db.users.find_one(
-            {"identifier": payload.identifier},
-            {"_id": 0}
-        )
-
-        if existing:
-            logger.warning(
-                "REGISTER DUPLICATE: identifier=%s",
-                payload.identifier
-            )
-            raise HTTPException(
-                status_code=409,
-                detail="An account already exists"
-            )
-
-        user = make_user(
-            payload.identifier,
-            payload.full_name,
-            "customer"
-        )
-
-        if payload.email:
-            user["email"] = str(payload.email)
-
-        logger.info("REGISTER HASHING PASSWORD")
-
-        user["password_hash"] = bcrypt.hashpw(
-            payload.password.encode("utf-8"),
-            bcrypt.gensalt()
-        ).decode("utf-8")
-
-        logger.info("REGISTER INSERTING USER")
-
-        await db.users.insert_one(user.copy())
-
-        logger.info(
-            "REGISTER INSERT SUCCESS: identifier=%s",
-            payload.identifier
-        )
-
-        return {
-            "token": token_for(user),
-            "user": safe_user(user)
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception as exc:
-        logger.exception(
-            "REGISTER FAILED: %s",
-            exc
-        )
-        raise HTTPException(
-            status_code=500,
-            detail="Registration failed. Check server logs."
-        )
-
-
-@api.post("/auth/login")
-async def login(payload: AuthInput) -> dict:
-    user = await db.users.find_one({"identifier": payload.identifier}, {"_id": 0})
-    if not user or not bcrypt.checkpw(payload.password.encode(), user["password_hash"].encode()):
-        raise HTTPException(status_code=401, detail="Incorrect email/mobile or password")
-    safe = safe_user(user)
-    return {"token": token_for(safe), "user": safe}
+@
 
 
 @api.post("/auth/admin/login")
@@ -422,7 +352,72 @@ async def list_users(
         query["is_approved"] = True
     rows = await db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(500)
     return rows
+@api.post("/auth/register")
+async def register(payload: RegisterInput) -> dict:
+    try:
+        logger.info(
+            "Registration attempt: identifier=%s email=%s",
+            payload.identifier,
+            payload.email
+        )
 
+        existing = await db.users.find_one(
+            {"identifier": payload.identifier},
+            {"_id": 0}
+        )
+
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail="An account already exists"
+            )
+
+        user = make_user(
+            payload.identifier,
+            payload.full_name,
+            "customer"
+        )
+
+        if payload.email:
+            user["email"] = str(payload.email)
+
+        password_bytes = payload.password.encode("utf-8")
+
+        user["password_hash"] = bcrypt.hashpw(
+            password_bytes,
+            bcrypt.gensalt()
+        ).decode("utf-8")
+
+        logger.info(
+            "Inserting new user: %s",
+            payload.identifier
+        )
+
+        await db.users.insert_one(user.copy())
+
+        logger.info(
+            "Registration successful: %s",
+            payload.identifier
+        )
+
+        return {
+            "token": token_for_user(user),
+            "user": safe_user(user)
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        logger.exception(
+            "REGISTRATION FAILED for %s",
+            payload.identifier
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Registration failed: {type(exc).__name__}: {str(exc)}"
+        )
 
 @api.post("/users/{user_id}/approve")
 async def approve_customer(
