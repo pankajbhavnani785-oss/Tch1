@@ -222,31 +222,23 @@ if not identifier:
         detail="Invalid token payload"
     )
 
-user = await db.users.find_one(
-    {
-        "$or": [
-            {"identifier": identifier},
-            {"id": identifier}
-        ]
-    },
-    {"_id": 0}
-)
-
-if not user:
-    raise HTTPException(
-        status_code=401,
-        detail="User not found"
+    user = await db.users.find_one(
+        {
+            "$or": [
+                {"identifier": identifier},
+                {"id": identifier}
+            ]
+        },
+        {"_id": 0}
     )
 
-return user
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="User not found"
+        )
 
-        if not user:
-            raise HTTPException(
-                status_code=401,
-                detail="User not found"
-            )
-
-        return user
+    return user
 
     except HTTPException:
         raise
