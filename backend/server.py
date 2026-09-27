@@ -176,46 +176,32 @@ def normalize_images(images: List[str]) -> List[str]:
     return normalized
 
 
-async def auth_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
-) -> dict:
-
+async def auth_user(credentials):
     if not credentials:
         raise HTTPException(
             status_code=401,
             detail="Authentication required"
         )
 
-    if credentials.scheme.lower() != "bearer":
+    if isinstance(credentials, str):
+        parts = credentials.split(" ", 1)
+
+        if len(parts) != 2:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid authorization header"
+            )
+
+        scheme, token = parts
+    else:
+        scheme = credentials.scheme
+        token = credentials.credentials
+
+    if scheme.lower() != "bearer":
         raise HTTPException(
             status_code=401,
-            detail="Authentication required"
+            detail="Invalid authentication scheme"
         )
-
-    try:
-        payload = jwt.decode(
-            credentials.credentials,
-            JWT_SECRET,
-            algorithms=["HS256"]
-        )
-    except jwt.PyJWTError as exc:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid session"
-        ) from exc
-
-    user = await db.users.find_one(
-        {"id": payload.get("sub")},
-        {"_id": 0}
-    )
-
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="User not found"
-        )
-
-    return user
 
 
 async def approved_user(
