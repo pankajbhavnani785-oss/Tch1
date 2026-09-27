@@ -129,9 +129,16 @@ def clean(doc: Optional[dict]) -> Optional[dict]:
     return doc
 
 
-def token_for(user: dict) -> str:
-    return jwt.encode({"sub": user["id"], "role": user["role"], "exp": datetime.now(timezone.utc) + timedelta(days=14)}, JWT_SECRET, algorithm="HS256")
-
+def token_for_user(user: dict) -> str:
+    return jwt.encode(
+        {
+            "sub": user["identifier"],
+            "role": user["role"],
+            "exp": datetime.now(timezone.utc) + timedelta(days=14)
+        },
+        JWT_SECRET,
+        algorithm="HS256"
+    )
 
 def make_user(identifier: str, full_name: str, role: str) -> dict:
     email = identifier.lower() if "@" in identifier else ""
