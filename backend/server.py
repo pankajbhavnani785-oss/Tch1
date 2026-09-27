@@ -322,15 +322,66 @@ async def root() -> dict:
 
 @api.post("/auth/register")
 async def register(payload: RegisterInput) -> dict:
-    existing = await db.users.find_one({"identifier": payload.identifier}, {"_id": 0})
-    if existing:
-        raise HTTPException(status_code=409, detail="An account already exists")
-    user = make_user(payload.identifier, payload.full_name, "customer")
-    if payload.email:
-        user["email"] = str(payload.email)
-    user["password_hash"] = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt()).decode()
-    await db.users.insert_one(user.copy())
-    return {"token": token_for(user), "user": safe_user(user)}
+    try:
+        logger.info("REGISTER START: identifier=%s", payload.identifier)
+
+        existing = await db.users.find_one(
+            {"identifier": payload.identifier},
+            {"_id": 0}
+        )
+
+        if existing:
+            logger.warning(
+                "REGISTER DUPLICATE: identifier=%s",
+                payload.identifier
+            )
+            raise HTTPException(
+                status_code=409,
+                detail="An account already exists"
+            )
+
+        user = make_user(
+            payload.identifier,
+            payload.full_name,
+            "customer"
+        )
+
+        if payload.email:
+            user["email"] = str(payload.email)
+
+        logger.info("REGISTER HASHING PASSWORD")
+
+        user["password_hash"] = bcrypt.hashpw(
+            payload.password.encode("utf-8"),
+            bcrypt.gensalt()
+        ).decode("utf-8")
+
+        logger.info("REGISTER INSERTING USER")
+
+        await db.users.insert_one(user.copy())
+
+        logger.info(
+            "REGISTER INSERT SUCCESS: identifier=%s",
+            payload.identifier
+        )
+
+        return {
+            "token": token_for(user),
+            "user": safe_user(user)
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        logger.exception(
+            "REGISTER FAILED: %s",
+            exc
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Registration failed. Check server logs."
+        )
 
 
 @api.post("/auth/login")
