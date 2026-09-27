@@ -211,28 +211,34 @@ async def auth_user(credentials):
             detail="Invalid authentication scheme"
         )
 
-    try:
-        payload = jwt.decode(
-            token,
-            JWT_SECRET,
-            algorithms=["HS256"]
-        )
+    identifier = (
+    payload.get("identifier")
+    or payload.get("sub")
+)
 
-        identifier = (
-            payload.get("identifier")
-            or payload.get("sub")
-        )
+if not identifier:
+    raise HTTPException(
+        status_code=401,
+        detail="Invalid token payload"
+    )
 
-        if not identifier:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid token payload"
-            )
-
-        user = await db.users.find_one(
+user = await db.users.find_one(
+    {
+        "$or": [
             {"identifier": identifier},
-            {"_id": 0}
-        )
+            {"id": identifier}
+        ]
+    },
+    {"_id": 0}
+)
+
+if not user:
+    raise HTTPException(
+        status_code=401,
+        detail="User not found"
+    )
+
+return user
 
         if not user:
             raise HTTPException(
