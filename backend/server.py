@@ -176,6 +176,7 @@ def normalize_images(images: List[str]) -> List[str]:
     return normalized
 
 
+
 async def auth_user(credentials):
     if not credentials:
         raise HTTPException(
@@ -202,6 +203,54 @@ async def auth_user(credentials):
             status_code=401,
             detail="Invalid authentication scheme"
         )
+
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET,
+            algorithms=["HS256"]
+        )
+
+        identifier = (
+            payload.get("identifier")
+            or payload.get("sub")
+        )
+
+        if not identifier:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token payload"
+            )
+
+        user = await db.users.find_one(
+            {"identifier": identifier},
+            {"_id": 0}
+        )
+
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="User not found"
+            )
+
+        return user
+
+    except HTTPException:
+        raise
+
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token"
+        )
+
+    except Exception:
+        logger.exception("Authentication error")
+        raise HTTPException(
+            status_code=500,
+            detail="Authentication failed"
+        )
+        
 
 
 async def approved_user(
