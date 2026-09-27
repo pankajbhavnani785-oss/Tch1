@@ -412,10 +412,21 @@ async def products(search: str = "", category_id: str = "", sort: str = "newest"
 
 
 @api.post("/products")
-async def create_product(payload: ProductInput, authorization: Optional[str] = Header(default=None)) -> dict:
+async def create_product(
+    payload: ProductInput,
+    authorization: Optional[str] = Header(None)
+):
     await admin_user(authorization)
-    if not await db.categories.find_one({"id": payload.category_id}, {"_id": 0}):
-        raise HTTPException(status_code=400, detail="Choose a valid category")
+
+    if not await db.categories.find_one(
+        {"id": payload.category_id},
+        {"_id": 0}
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Choose a valid category"
+        )
+
     if payload.price > payload.mrp:
         raise HTTPException(status_code=400, detail="Selling price cannot exceed MRP")
     values = payload.model_dump()
@@ -426,7 +437,7 @@ async def create_product(payload: ProductInput, authorization: Optional[str] = H
 
 
 @api.put("/products/{product_id}")
-async def update_product(product_id: str, payload: ProductInput, authorization: Optional[str] = Header(default=None)) -> dict:
+async def update_product(product_id: str, payload: ProductInput, authorization: Optional[str] = Header(None)) -> dict:
     await admin_user(authorization)
     values = payload.model_dump()
     values["images"] = normalize_images(values.get("images", []))
@@ -438,7 +449,7 @@ async def update_product(product_id: str, payload: ProductInput, authorization: 
 
 
 @api.patch("/products/{product_id}")
-async def patch_product(product_id: str, payload: ProductPatch, authorization: Optional[str] = Header(default=None)) -> dict:
+async def patch_product(product_id: str, payload: ProductPatch, authorization: Optional[str] = Header(None)) -> dict:
     await admin_user(authorization)
     existing = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not existing:
