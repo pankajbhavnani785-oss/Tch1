@@ -320,8 +320,6 @@ async def root() -> dict:
     return {"message": "TCH Kitchenware API"}
 
 
-@
-
 
 @api.post("/auth/admin/login")
 async def admin_login(payload: AuthInput) -> dict:
