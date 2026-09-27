@@ -12,6 +12,7 @@ import jwt
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, APIRouter, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends
 from pydantic import BaseModel, EmailStr, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.middleware.cors import CORSMiddleware
@@ -411,13 +412,15 @@ async def products(search: str = "", category_id: str = "", sort: str = "newest"
     return {"items": rows, "total": total, "offset": safe_offset, "limit": safe_limit}
 
 
+
 @api.post("/products")
 async def create_product(
     payload: ProductInput,
-    authorization: Optional[str] = Header(None)
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    await admin_user(authorization)
+    authorization = f"Bearer {credentials.credentials}"
 
+    await admin_user(authorization)
     if not await db.categories.find_one(
         {"id": payload.category_id},
         {"_id": 0}
