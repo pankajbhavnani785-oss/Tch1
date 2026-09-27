@@ -327,7 +327,7 @@ async def admin_login(payload: AuthInput) -> dict:
     if not user or not bcrypt.checkpw(payload.password.encode(), user["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Invalid admin credentials")
     safe = safe_user(user)
-    return {"token": token_for(safe), "user": safe}
+    return {"token": token_for_user(safe), "user": safe}
 
     
 @api.get("/auth/me")
